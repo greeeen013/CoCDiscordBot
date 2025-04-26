@@ -92,6 +92,48 @@ class PlayerSelectButton(discord.ui.Button): # Samostatné tlačítko pro výbě
         await self.view_parent.bot.potvrdit_hrace(interaction, player) # Pokračujeme v potvrzení
         self.view_parent.stop() # Ukončíme view
 
+class VerifikacniView(discord.ui.View):
+    @discord.ui.button(label="✅ Chci ověřit účet", style=discord.ButtonStyle.success)
+    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(VerifikaceModal())
+
+class VerifikaceModal(discord.ui.Modal, title="Ověření Clash of Clans účtu"):
+    hledat = discord.ui.TextInput(
+        label="Zadej své Clash of Clans jméno nebo tag",
+        placeholder="např. green013 nebo #2P0Y82Q",
+        required=True,
+        max_length=20
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        zadany_text = self.hledat.value
+        clenove = get_all_members()  # Načteme členy z databáze
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        if zadany_text.startswith("#"):
+            nalezeny = next((m for m in clenove if m.get("tag", "").upper() == zadany_text.upper()), None)
+            if nalezeny:
+                await interaction.client.potvrdit_hrace(interaction, nalezeny)
+            else:
+                await interaction.followup.send("❌ Hráč s tímto tagem nebyl nalezen.", ephemeral=True)
+        else:
+            shody = [m for m in clenove if m.get("name", "").casefold() == zadany_text.casefold()]
+            if len(shody) == 0:
+                await interaction.followup.send("❌ Nenašel jsem žádného hráče s tímto jménem.", ephemeral=True)
+            elif len(shody) == 1:
+                await interaction.client.potvrdit_hrace(interaction, shody[0])
+            elif len(shody) <= 3:
+                view = SelectPlayerView(shody, interaction.user, interaction.client, interaction)
+                description = ""
+                emojis = ["1️⃣", "2️⃣", "3️⃣"]
+                for i, player in enumerate(shody):
+                    description += f"{emojis[i]} {player['name']} ({player['tag']}) | 🏆 {player['trophies']} | TH{player['townHallLevel']}\n"
+
+                await interaction.followup.send(description, view=view, ephemeral=True)
+            else:
+                await interaction.followup.send("⚠️ Našlo se víc než 3 hráči se stejným jménem. Zadej prosím konkrétní tag (#...).", ephemeral=True)
+
 class MyBot(commands.Bot): # Definice hlavního bota
     def __init__(self, command_prefix, intents, guild_id, clan_tag, config):
         super().__init__(command_prefix=command_prefix, intents=intents)
@@ -100,6 +142,36 @@ class MyBot(commands.Bot): # Definice hlavního bota
         self.config = config # Konfigurace bota (tokeny atd.)
 
     async def setup_hook(self):
+        @self.tree.command(name="vytvor_verifikacni_tabulku", description="Vytvoří verifikační tabulku s tlačítkem",
+                           guild=self.guild_object)
+        async def vytvor_verifikacni_tabulku(interaction: discord.Interaction):
+            if not interaction.user.guild_permissions.administrator:
+                await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.",
+                                                        ephemeral=True)
+                return
+
+            embed = discord.Embed(
+                title="✅ Ověření účtu Clash of Clans",
+                description=(
+                    "**Klikni na tlačítko níže a ověř si svůj účet!**\n\n"
+                    "- Po kliknutí zadáš své jméno nebo tag.\n"
+                    "- Budeš proveden procesem ověření.\n"
+                    "- Tento kanál slouží pouze k ověření – psaní zpráv není povoleno."
+                ),
+                color=discord.Color.green()
+            )
+            embed.set_footer(text="Tým Clash of Clans ověřování 🔒")
+
+            view = VerifikacniView()
+
+            await interaction.channel.send(embed=embed, view=view)
+
+            # Uzamkneme práva na psaní
+            overwrite = discord.PermissionOverwrite()
+            overwrite.send_messages = False
+            await interaction.channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
+
+            await interaction.response.send_message("✅ Verifikační tabulka vytvořena a kanál uzamčen!", ephemeral=True)
         @self.tree.command(name="verifikovat", description="Ověř si svůj účet pomocí jména nebo tagu",guild=self.guild_object) # Slash příkaz /verifikovat
         @app_commands.describe(hledat="Zadej své Clash of Clans jméno nebo tag (#ABCD123)")
         async def verifikovat(interaction: discord.Interaction, hledat: str): # hledat je vstup – jméno nebo tag.
