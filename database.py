@@ -167,7 +167,7 @@ def add_coc_link(discord_name: str, coc_tag: str, coc_name: str):
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
             c.execute("""
-                INSERT OR REPLACE INTO coc_links (discord_name, coc_tag, coc_name)
+                INSERT OR REPLACE INTO coc_discord_links (discord_name, coc_tag, coc_name)
                 VALUES (?, ?, ?)
             """, (discord_name, coc_tag, coc_name))
             conn.commit()
@@ -183,7 +183,7 @@ def remove_coc_link(discord_name: str):
     try:
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
-            c.execute("DELETE FROM coc_links WHERE discord_name = ?", (discord_name,))
+            c.execute("DELETE FROM coc_discord_links WHERE discord_name = ?", (discord_name,))
             conn.commit()
             print(f"🗑️ Propojení odstraněno pro Discord jméno: {discord_name}")
     except Exception as e:
