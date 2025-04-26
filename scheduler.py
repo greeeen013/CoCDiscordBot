@@ -17,7 +17,7 @@ async def hourly_clan_update(config: dict, bot):
             print("🔁 [scheduler] Spouštím aktualizaci seznamu členů klanu...")
             data = await fetch_clan_members_list(config["CLAN_TAG"], config)
             if data:
-                print(f"✅ Načteno {len(data.get('items', []))} členů klanu.")
+                print(f"✅ [scheduler] Načteno {len(data.get('items', []))} členů klanu.")
                 process_clan_data(data.get("items", []))
         else:
             print("⏸️ [scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")

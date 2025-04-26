@@ -222,9 +222,9 @@ class MyBot(commands.Bot): # Definice hlavního bota
 
         try:
             synced = await self.tree.sync(guild=self.guild_object) # Synchronizace slash příkazů se serverem.
-            print(f"✅ Synchronizováno {len(synced)} příkaz(ů) se serverem {self.guild_object.id}") # Vypíše do konzole počet synchronizovaných příkazů.
+            print(f"✅ [bot_commands] Synchronizováno {len(synced)} příkaz(ů) se serverem {self.guild_object.id}") # Vypíše do konzole počet synchronizovaných příkazů.
         except Exception as e: # Pokud dojde k chybě při synchronizaci, vypíše chybu do konzole.
-            print(f"❌ Chyba při synchronizaci příkazů: {e}")
+            print(f"❌ [bot_commands] Chyba při synchronizaci příkazů: {e}")
 
         asyncio.create_task(hourly_clan_update(self.config, self)) # Spustí funkci na aktualizaci členů každou hodinu na pozadí.
 
