@@ -45,13 +45,10 @@ async def end_verification(user, verification_channel):
     """
     Obnoví práva v hlavním kanálu a smaže verifikační místnost.
     """
-    guild = verification_channel.guild
-    main_channel = guild.get_channel(VERIFICATION_CHANNEL_ID)
 
-    await verification_channel.send("❌ Nepodařilo se ověřit během časového limitu. Zkus to prosím znovu.")
     await asyncio.sleep(5)
     await verification_channel.send("🗑️ místnost bude automaticky smazána za 3 sekundy...")
-    await main_channel.set_permissions(user, overwrite=None)  # Vrátíme defaultní práva
+
     await verification_channel.delete()
     print(f"🗑️ [verification] {user} se neověřil takže místnost {verification_channel.name} po ukončené verifikaci byla smazána.")
 
@@ -139,7 +136,7 @@ async def process_verification(player_data, user, verification_channel, selected
 
         embed.add_field(
             name="🎯 Vybrané vybavení k nasazení:",
-            value=f"     **{chosen_item}**",
+            title=f"‎ ‎ ‎ ‎ ‎ **{chosen_item}**",
             inline=False
         )
 
@@ -149,14 +146,14 @@ async def process_verification(player_data, user, verification_channel, selected
                 "• **1.** Přihlas se do Clash of Clans\n"
                 "• **2.** Nasaď vybavení uvedené výše\n"
                 "• **3.** **Stačí jen equipnout** - nemusíš odehrát žádný útok ani jiné akce!\n"
-                "• **4.** Bot každé 3 minuty kontroluje změny\n"
-                "• **5.** Jakmile zjistíme změnu, ověření bude automaticky dokončeno a bot tě přivítá ✅\n"
-                "• **6.** Pokud nestihneš do **15 minut**, ověření expiruje ❌"
+                "• **4.** Bot každých 5 minuty kontroluje změny\n"
+                "• **5.** Jakmile zjistíme změnu, ověření proběhne automaticky dokončeno a bot tě přivítá ✅\n"
+                "• **6.** Pokud nestihneš do **20 minut**, ověření expiruje ❌"
             ),
             inline=False
         )
 
-        embed.set_footer(text="⚠️ Změnil jsi, ale nefunguje? Klid - aktualizace dat ze serveru Clash of Clans trvá ~3 minuty. Při další kontrole to bude cajk 😉")
+        embed.set_footer(text="⚠️ Změnil jsi, ale nefunguje? Klid - aktualizace dat ze serveru Clash of Clans trvá ~5-6 minuty. Při další kontrole to bude cajk 😉")
 
         await verification_channel.send(embed=embed)
 
@@ -167,7 +164,7 @@ async def process_verification(player_data, user, verification_channel, selected
     else:
         print(f"🔄 [verification] Kontrola změny pro hráče {user}...")
         if selected_item in equipped_items:
-            succesful_verification(user, verification_channel, selected_item, player_data["name"])
+            await succesful_verification(user, verification_channel, selected_item, player_data["name"])
             return "verified"
         else:
             await verification_channel.send(f"⏳ Vybavení **{selected_item}** zatím není nasazeno. Další kontrola za 3 minuty...")

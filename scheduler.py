@@ -71,8 +71,8 @@ async def verification_check_loop(bot, player_tag, user, verification_channel, c
 
     # === Další pull každé 2 minuty ===
     tries = 0
-    while tries < 6:
-        await asyncio.sleep(120)  # 2 minuty
+    while tries < 4:
+        await asyncio.sleep(300)  # 5 minuty
         tries += 1
 
         print(f"🔄 [scheduler] zahajuji stahování data pro hráče {user}")
@@ -95,5 +95,8 @@ async def verification_check_loop(bot, player_tag, user, verification_channel, c
     # Pokud po 6 pokusech (12 minut) se neověří
 
     await end_verification(user, verification_channel)
+    await verification_channel.send("❌ Nepodařilo se ověřit během časového limitu. Zkus to prosím znovu.")
+    main_channel = verification_channel.guild.get_channel(1365437738467459265)
+    await main_channel.set_permissions(user, overwrite=None)  # Vrátíme defaultní práva
     resume_hourly_update()
 
