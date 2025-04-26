@@ -93,10 +93,11 @@ async def verification_check_loop(bot, player_tag, user, verification_channel, c
             continue
 
     # Pokud po 6 pokusech (12 minut) se neověří
-
-    await end_verification(user, verification_channel)
-    await verification_channel.send("❌ Nepodařilo se ověřit během časového limitu. Zkus to prosím znovu.")
-    main_channel = verification_channel.guild.get_channel(1365437738467459265)
+    # tak
+    await end_verification(user, verification_channel) # zavolá funkci pro ukončení ověření
+    await verification_channel.send("❌ Nepodařilo se ověřit během časového limitu. Zkus to prosím znovu.") # pošle zprávu do kanálu
+    main_channel = verification_channel.guild.get_channel(1365437738467459265) # získá hlavní kanál
     await main_channel.set_permissions(user, overwrite=None)  # Vrátíme defaultní práva
-    resume_hourly_update()
+    print(f"🗑️ [verification] {user} se neověřil takže místnost {verification_channel.name} po ukončené verifikaci byla smazána.") # vytiskne zprávu do konzole
+    resume_hourly_update() # obnoví hodinový update
 

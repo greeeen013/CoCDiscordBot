@@ -48,9 +48,9 @@ async def end_verification(user, verification_channel):
 
     await asyncio.sleep(5)
     await verification_channel.send("🗑️ místnost bude automaticky smazána za 3 sekundy...")
-
+    await asyncio.sleep(3)
     await verification_channel.delete()
-    print(f"🗑️ [verification] {user} se neověřil takže místnost {verification_channel.name} po ukončené verifikaci byla smazána.")
+
 
 async def succesful_verification(user, verification_channel, selected_item, coc_name):
     """
@@ -136,7 +136,7 @@ async def process_verification(player_data, user, verification_channel, selected
 
         embed.add_field(
             name="🎯 Vybrané vybavení k nasazení:",
-            title=f"‎ ‎ ‎ ‎ ‎ **{chosen_item}**",
+            value=f"‎‎‎‎‎‎‎‎‎‎‎‎‎‎‎ **{chosen_item}**",
             inline=False
         )
 

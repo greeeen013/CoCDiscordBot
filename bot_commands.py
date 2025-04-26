@@ -93,7 +93,9 @@ class PlayerSelectButton(discord.ui.Button): # Samostatné tlačítko pro výbě
         self.view_parent.stop() # Ukončíme view
 
 class VerifikacniView(discord.ui.View):
-    @discord.ui.button(label="✅ Chci ověřit účet", style=discord.ButtonStyle.success)
+    def __init__(self):
+        super().__init__(timeout=None) # Bez timeoutu, aby tlačítko zůstalo aktivní
+    @discord.ui.button(label="✅ Chci ověřit účet", style=discord.ButtonStyle.success, custom_id="start_verification")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(VerifikaceModal())
 
@@ -215,6 +217,7 @@ class MyBot(commands.Bot): # Definice hlavního bota
 
     async def on_ready(self):
         print(f"✅🤖 Přihlášen jako {self.user}") # Když je bot přihlášený, vypíše info do konzole.
+        self.add_view(VerifikacniView())
 
     async def potvrdit_hrace(self, interaction, player):
         embed = discord.Embed(
