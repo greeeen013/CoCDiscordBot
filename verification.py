@@ -27,14 +27,14 @@ async def start_verification_permission(interaction, player, config):
     new_channel = await guild.create_text_channel(f"verifikace-{player['name']}", overwrites=overwrites)
     print(f"✅ Vytvořena verifikační místnost: {new_channel.name}")
 
-    await welcome_message(new_channel, player)  # Spustíme správu ověřování
+    await welcome_message(new_channel, player, author)  # Spustíme správu ověřování
     start_verification_checker(interaction.client, player["tag"], author, new_channel, config)
 
-async def welcome_message(channel, player):
+async def welcome_message(channel, player, author):
     """
     Pošle úvodní zprávu do nové místnosti.
     """
-    await channel.send(f"👋 Ahoj @{player['name']}! Připrav se na ověření tvého účtu. Za chvíli zahájíme kontrolu.")
+    await channel.send(f"👋 Ahoj <@{author.id}>! Připrav se na ověření tvého účtu. Za chvíli zahájíme kontrolu.")
 
 def start_verification_checker(bot, player_tag, user, verification_channel, config):
     from scheduler import verification_check_loop
