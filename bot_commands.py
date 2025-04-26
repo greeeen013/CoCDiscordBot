@@ -92,11 +92,24 @@ class PlayerSelectButton(discord.ui.Button): # Samostatné tlačítko pro výbě
         await self.view_parent.bot.potvrdit_hrace(interaction, player) # Pokračujeme v potvrzení
         self.view_parent.stop() # Ukončíme view
 
+
 class VerifikacniView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None) # Bez timeoutu, aby tlačítko zůstalo aktivní
+        super().__init__(timeout=None)  # Bez timeoutu, aby tlačítko zůstalo aktivní
+
     @discord.ui.button(label="✅ Chci ověřit účet", style=discord.ButtonStyle.success, custom_id="start_verification")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Check if user has the role 1365768439473373235
+        role_id = 1365768439473373235
+        if discord.utils.get(interaction.user.roles, id=role_id):
+            # User has the role - send ephemeral message that they can't verify again
+            await interaction.response.send_message(
+                "❌ Již jsi ověřený a nemůžeš se ověřit znovu!",
+                ephemeral=True
+            )
+            return
+
+        # User doesn't have the role - proceed with verification
         await interaction.response.send_modal(VerifikaceModal())
 
 class VerifikaceModal(discord.ui.Modal, title="Ověření Clash of Clans účtu"):
