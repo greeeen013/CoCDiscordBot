@@ -131,17 +131,36 @@ async def process_verification(player_data, user, verification_channel, selected
         print(f"🎯 [verification Debug] Hledám nasazení itemu: {chosen_item}")
         print(f"🎯 [verification Debug] Aktuálně nasazené předměty: {equipped_items}")
 
-        await verification_channel.send(
-            f"=======================================================================\n"
-            f"🛡️ Pro dokončení ověření si prosím nasaď vybavení: **{chosen_item}**\n"
-            f"=======================================================================\n"
-            f"🎮 **Stačí jen equipnout** - nemusíš odehrát žádný útok ani jiné akce!\n"
-            f"🤖 Jakmile uděláš změnu, bot tě automaticky přivítá.\n"  
-            f"🔄 Bot kontroluje změny každé 3 minuty - po equipnutí jen vyčkej.\n"
-            f"👀 Vše proběhne automaticky, jakmile změnu detekujeme.\n"
-            f"⏳⏱️ **Časový limit: 15 minut** (jinak ověření expiruje)\n"
-            f"⚠️ Změnil jsi, ale nefunguje? Klid - aktualizace dat ze serveru trvá ~3 minuty. Při další kontrole to bude cajk 😉"
+        embed = discord.Embed(
+            title="🛡️ Ověření účtu - Nasaď vybavení",
+            description="Abychom tě mohli ověřit, postupuj podle následujících kroků:",
+            color=discord.Color.blurple()
         )
+
+        embed.add_field(
+            name="🎯 Vybrané vybavení k nasazení:",
+            value=f"     **{chosen_item}**",
+            inline=False
+        )
+
+        embed.add_field(
+            name="📜 Instrukce:",
+            value=(
+                "• **1.** Přihlas se do Clash of Clans\n"
+                "• **2.** Nasaď vybavení uvedené výše\n"
+                "• **3.** **Stačí jen equipnout** - nemusíš odehrát žádný útok ani jiné akce!\n"
+                "• **4.** Bot každé 3 minuty kontroluje změny\n"
+                "• **5.** Jakmile zjistíme změnu, ověření bude automaticky dokončeno a bot tě přivítá ✅\n"
+                "• **6.** Pokud nestihneš do **15 minut**, ověření expiruje ❌"
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text="⚠️ Změnil jsi, ale nefunguje? Klid - aktualizace dat ze serveru Clash of Clans trvá ~3 minuty. Při další kontrole to bude cajk 😉")
+
+        await verification_channel.send(embed=embed)
+
+
         print(f"✅ [Verification] Hráč {user} má nasadit: {chosen_item}")
         return chosen_item
 
