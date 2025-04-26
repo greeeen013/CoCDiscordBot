@@ -15,7 +15,7 @@ def get_headers(config: dict) -> dict:
 BASE_URL = "https://api.clashofclans.com/v1"
 
 # === Funkce pro stažení seznamu členů klanu ===
-async def fetch_clan_members(clan_tag: str, config: dict) -> dict | None:
+async def fetch_clan_members_list(clan_tag: str, config: dict) -> dict | None:
     """
     Volá Clash of Clans API pro získání seznamu členů klanu.
     Vstup: clan_tag (např. #ABCD123)
@@ -26,14 +26,14 @@ async def fetch_clan_members(clan_tag: str, config: dict) -> dict | None:
         url = "https://api.clashofclans.com/v1/clans/%232qqopy9v8/members"
         async with session.get(url) as response:
             if response.status == 200:
-                print("✅ Úspěšně načten seznam členů klanu.")
+                print("✅ [api_handler] Úspěšně načten seznam členů klanu.")
                 return await response.json()
             else:
-                print(f"❌ Chyba při načítání členů klanu: {response.status}")
+                print(f"❌ [api_handler] Chyba při načítání členů klanu: {response.status}")
                 return None
 
 # === Funkce pro stažení dat konkrétního hráče ===
-async def fetch_player(player_tag: str, config: dict) -> dict | None:
+async def fetch_player_data(player_tag: str, config: dict) -> dict | None:
     """
     Volá Clash of Clans API pro získání informací o konkrétním hráči.
     Vstup: player_tag (např. #PLAYER123)
@@ -44,11 +44,11 @@ async def fetch_player(player_tag: str, config: dict) -> dict | None:
         url = f"{BASE_URL}/players/{player_tag.replace('#', '%23')}"
         async with session.get(url) as response:
             if response.status == 200:
-                print(f"✅ Načten hráč {player_tag}")
+                print(f"✅ [api_handler] Načten hráč {player_tag}")
                 return await response.json()
             elif response.status == 429:
-                print(f"⚠️ Překročen limit API požadavků (rate limit) při hráči {player_tag}")
+                print(f"⚠️ [api_handler] Překročen limit API požadavků (rate limit) při hráči {player_tag}")
                 return None
             else:
-                print(f"❌ Chyba při načítání hráče {player_tag}: {response.status}")
+                print(f"❌ [api_handler] Chyba při načítání hráče {player_tag}: {response.status}")
                 return None

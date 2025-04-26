@@ -4,6 +4,7 @@ from discord.ext import commands # Import třídy commands z discord.ext.command
 import asyncio # Import knihovny asyncio pro asynchronní programování (např. čekání na události)
 from scheduler import hourly_clan_update # Import funkce pro hodinovou aktualizaci členů klanu
 from database import get_all_members # Import funkce, která načítá všechny hráče z databáze
+from verification import start_verification_permission  # Importuj funkci ze souboru verification.py
 
 VERIFICATION_PATH = "verification_data.json" # Definování konstanty s cestou k souboru, kde se ukládá info o zprávě pro verifikaci
 TOWN_HALL_EMOJIS = {
@@ -25,7 +26,18 @@ TOWN_HALL_EMOJIS = {
     2: "",
     1: "",
     # atd...
-}
+} # Definování emoji pro jednotlivé úrovně Town Hall (TH) v Clash of Clans
+LEAGUES = {
+    "Bronze League": "<:league_bronze:1365740648820637807>",
+    "Silver League": "<:league_silver:1365740647247646870>",
+    "Gold League": "<:league_gold:1365740651898998824>",
+    "Crystal League": "<:league_crystal:1365740653253754930>",
+    "Master League": "<:league_master:1365740645355884764>",
+    "Champion League": "<:league_champion:1365740643439214683>",
+    "Titan League": "<:league_titan:1365740641765691412>",
+    "Legend League": "<:league_legend:1365740639895158886>",
+    "Unranked": "<:league_unranked:1365740650351558787>",
+} # Definování emoji pro jednotlivé ligy v Clash of Clans
 
 class ConfirmView(discord.ui.View): # Definice view (rozhraní s tlačítkem) pro potvrzení identity hráče
     def __init__(self, player, user, bot): # Konstruktor view – přijímá hráče, uživatele a instanci bota
@@ -35,14 +47,21 @@ class ConfirmView(discord.ui.View): # Definice view (rozhraní s tlačítkem) pr
         self.bot = bot # Instance bota
         self.result = False # Výsledek potvrzení (zda bylo potvrzeno)
 
-    @discord.ui.button(label="✅ Potvrdit", style=discord.ButtonStyle.success) # Definice tlačítka v rámci view
+    @discord.ui.button(label="✅ Potvrdit", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.user: # Ověříme, že tlačítko stiskl správný uživatel
+        """
+        Callback pro potvrzovací tlačítko – spustí verifikační proces.
+        """
+        if interaction.user != self.user:
             await interaction.response.send_message("❌ Toto tlačítko není pro tebe!", ephemeral=True)
             return
-        self.result = True # Nastavíme výsledek na True, hráč potvrzen
-        await interaction.response.send_message(f"✅ Ověřil ses jako {self.player['name']} ({self.player['tag']})!", ephemeral=True)
-        self.stop() # Ukončí view, zmizí tlačítka
+
+        self.result = True
+
+        # spustíme proces verifikace
+        await start_verification_permission(interaction, self.player, interaction.client.config)
+
+        self.stop()  # Ukončí view, zmizí tlačítka
 
 class SelectPlayerView(discord.ui.View): # View pro výběr hráče, pokud existuje více stejných jmen
     def __init__(self, candidates, user, bot, interaction):
@@ -138,10 +157,10 @@ class MyBot(commands.Bot): # Definice hlavního bota
         role = player.get("role", "member")
 
         embed.add_field(name="🏆 Trofeje", value=f"{trophies}", inline=True)
-        embed.add_field(name="🏅 Liga", value=f"{league}", inline=True)
+        embed.add_field(name="🏅 Liga", value=f"{league} {LEAGUES.get(' '.join(league.split()[:2]))}", inline=True)
+        embed.add_field(name="👑 Role v klanu", value=f"{role}", inline=True)
+        embed.add_field(name="🏰 Town Hall lvl", value=f"{townhall_level} {TOWN_HALL_EMOJIS.get(townhall_level)}", inline=True)
 
-        embed.add_field(name="👑 Role v klanu", value=f"{role}", inline=False)
-        embed.add_field(name="🏰 Town Hall", value=f"TH{townhall_level}", inline=True)
 
         embed.set_footer(text="Klikni na ✅ pro potvrzení")
 

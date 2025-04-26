@@ -50,9 +50,9 @@ def create_database():
                 )
             ''')
             conn.commit()
-            print("✅ Databáze a tabulky vytvořeny.")
+            print("✅ [database] Databáze a tabulky vytvořeny.")
     except Exception as e:
-        print(f"❌ Chyba při vytváření databáze: {e}")
+        print(f"❌ [database] Chyba při vytváření databáze: {e}")
 
 # === Uloží nebo aktualizuje hráče ===
 def update_or_create_members(data: list[dict]):
@@ -98,7 +98,7 @@ def update_or_create_members(data: list[dict]):
                         c.execute("""
                             INSERT INTO clan_members VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, tuple(values.values()))
-                        print(f"🆕 Přidán nový člen: {values['name']} ({tag})")
+                        print(f"🆕 [database] Přidán nový člen: {values['name']} ({tag})")
                     else:
                         changes = []
                         for i, key in enumerate(TRACKED_FIELDS):
@@ -129,15 +129,15 @@ def update_or_create_members(data: list[dict]):
                             for change in changes:
                                 print(f"   - {change[0]} změna: {change[1]} → {change[2]}{change[3]}")
                 except Exception as member_error:
-                    print(f"❌ Chyba při zpracování člena: {member_error}")
+                    print(f"❌ [database] Chyba při zpracování člena: {member_error}")
 
             tags_to_remove = existing_tags - incoming_tags
             for tag in tags_to_remove:
                 c.execute("DELETE FROM clan_members WHERE tag = ?", (tag,))
-                print(f"🗑️ Odebrán hráč s tagem {tag} – již není v klanu.")
+                print(f"🗑️ [database] Odebrán hráč s tagem {tag} – již není v klanu.")
 
     except Exception as e:
-        print(f"❌ Chyba při zápisu do databáze: {e}")
+        print(f"❌ [database] Chyba při zápisu do databáze: {e}")
 
 # === Hlavní řídící funkce pro práci s databází ===
 def process_clan_data(data: list[dict]):
@@ -148,7 +148,7 @@ def process_clan_data(data: list[dict]):
     - Pak provede aktualizace nebo zápis hráčů
     """
     if not isinstance(data, list):
-        print("❌ Data nejsou ve správném formátu: očekáván seznam hráčů.")
+        print("❌ [database] Data nejsou ve správném formátu: očekáván seznam hráčů.")
         return
 
     if not database_exists():
@@ -171,9 +171,9 @@ def add_coc_link(discord_name: str, coc_tag: str, coc_name: str):
                 VALUES (?, ?, ?)
             """, (discord_name, coc_tag, coc_name))
             conn.commit()
-            print(f"✅ Propojení uloženo pro {discord_name} → {coc_tag} ({coc_name})")
+            print(f"✅ [database] Propojení uloženo pro {discord_name} → {coc_tag} ({coc_name})")
     except Exception as e:
-        print(f"❌ Chyba při ukládání propojení: {e}")
+        print(f"❌ [database] Chyba při ukládání propojení: {e}")
 
 # === Odstranění propojení podle Discord jména ===
 def remove_coc_link(discord_name: str):
@@ -185,9 +185,9 @@ def remove_coc_link(discord_name: str):
             c = conn.cursor()
             c.execute("DELETE FROM coc_discord_links WHERE discord_name = ?", (discord_name,))
             conn.commit()
-            print(f"🗑️ Propojení odstraněno pro Discord jméno: {discord_name}")
+            print(f"🗑️ [database] Propojení odstraněno pro Discord jméno: {discord_name}")
     except Exception as e:
-        print(f"❌ Chyba při odstraňování propojení: {e}")
+        print(f"❌ [database] Chyba při odstraňování propojení: {e}")
 
 def get_all_members():
     """
