@@ -3,8 +3,9 @@ from discord import app_commands
 from discord.ext import commands # Import třídy commands z discord.ext.commands pro práci s příkazy a bota
 import asyncio # Import knihovny asyncio pro asynchronní programování (např. čekání na události)
 from scheduler import hourly_clan_update # Import funkce pro hodinovou aktualizaci členů klanu
-from database import get_all_members # Import funkce, která načítá všechny hráče z databáze
+from database import get_all_members, get_all_links # Import funkce, která načítá všechny hráče z databáze
 from verification import start_verification_permission  # Importuj funkci ze souboru verification.py
+from role_giver import update_roles # Import funkce pro získání mapování mezi Discord ID a tagy hráčů
 
 VERIFICATION_PATH = "verification_data.json" # Definování konstanty s cestou k souboru, kde se ukládá info o zprávě pro verifikaci
 TOWN_HALL_EMOJIS = {
@@ -157,6 +158,29 @@ class MyBot(commands.Bot): # Definice hlavního bota
         self.config = config # Konfigurace bota (tokeny atd.)
 
     async def setup_hook(self):
+        @self.tree.command(name="aktualizujrole", description="Aktualizuje role všech propojených členů",
+                           guild=self.guild_object)
+        async def aktualizujrole(interaction: discord.Interaction):
+            if not interaction.user.guild_permissions.administrator:
+                await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.",
+                                                        ephemeral=True)
+                return
+
+            await interaction.response.defer(thinking=True, ephemeral=True)
+
+
+            clan_members = get_all_members()  # Vrátí všechny členy klanu z databáze
+            user_mapping = get_all_links()  # Vrátí propojení Discord ID -> Tag (ten list co jsi popisoval)
+
+            if not clan_members or not user_mapping:
+                await interaction.followup.send("❌ Chyba: nebyla načtena databáze členů nebo propojení.",
+                                                ephemeral=True)
+                return
+
+            # Zavoláme aktualizaci
+            await update_roles(interaction.guild, user_mapping, clan_members)
+
+            await interaction.followup.send("✅ Role byly úspěšně aktualizovány!", ephemeral=True)
         @self.tree.command(name="vytvor_verifikacni_tabulku", description="Vytvoří verifikační tabulku s tlačítkem",
                            guild=self.guild_object)
         async def vytvor_verifikacni_tabulku(interaction: discord.Interaction):
@@ -262,6 +286,7 @@ class MyBot(commands.Bot): # Definice hlavního bota
 def start_bot(config): # Funkce pro spuštění bota
     intents = discord.Intents.default() # Vytvoříme defaultní intents
     intents.message_content = True # Povolení obsahu zpráv
+    intents.members = True  # Povolení členů (pro role a ověřování)
 
     bot = MyBot( # Vytvoříme instanci bota
         command_prefix="/", # Prefix pro příkazy

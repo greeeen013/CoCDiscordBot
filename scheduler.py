@@ -1,7 +1,8 @@
 import asyncio
 
 from api_handler import fetch_clan_members_list, fetch_player_data
-from database import process_clan_data
+from database import process_clan_data, get_all_links, get_all_members
+from role_giver import update_roles
 
 # === Stav pozastavení hodinového updatu ===
 is_hourly_paused = False
@@ -12,13 +13,25 @@ async def hourly_clan_update(config: dict, bot):
     Periodicky stahuje seznam členů klanu každou hodinu,
     aktualizuje databázi a zprávu s výběrem účtu.
     """
+    guild = bot.get_guild(bot.guild_object.id)
     while True:
         if not is_hourly_paused:
+
             print("🔁 [scheduler] Spouštím aktualizaci seznamu členů klanu...")
             data = await fetch_clan_members_list(config["CLAN_TAG"], config)
             if data:
+                # clan informace
                 print(f"✅ [scheduler] Načteno {len(data.get('items', []))} členů klanu.")
                 process_clan_data(data.get("items", []))
+
+            print("🔄 [Scheduler] Spouštím automatickou aktualizaci rolí...")
+            links = get_all_links()
+            members = get_all_members()
+            await update_roles(guild, links, members)
+            print("✅ [Scheduler] Aktualizace rolí dokončena.")
+
+
+
         else:
             print("⏸️ [scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
@@ -56,7 +69,7 @@ async def verification_check_loop(bot, player_tag, user, verification_channel, c
 
     if not player_data:
         await verification_channel.send("❌ Chyba při načítání dat hráče.")
-        print(f"❌ [scheduler] Chyba při fetchnutí dat pro {player_tag}.")
+        print(f"❌ [scheduler] Chyba při fetchnutí dat pro {user}.")
         await end_verification(user, verification_channel)
         resume_hourly_update()
         return

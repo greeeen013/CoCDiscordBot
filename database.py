@@ -157,6 +157,27 @@ def process_clan_data(data: list[dict]):
 
     update_or_create_members(data)
 
+def get_all_links():
+    """
+    Vrátí záznam propojení mezi Discord jménem a CoC účtem.
+    vstup: nic
+    vrátí: tag a jménem CoC účtu nebo None, pokud neexistuje
+    """
+    conn = sqlite3.connect("coc_data_info.sqlite3")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT discord_name, coc_tag, coc_name FROM coc_discord_links")
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    # Předěláme na formát {discord_id: (coc_tag, coc_name)}
+    result = {}
+    for discord_name, coc_tag, coc_name in rows:
+        result[discord_name] = (coc_tag, coc_name)
+
+    return result
+
 # === Přidání propojení mezi Discord jménem a CoC účtem ===
 def add_coc_link(discord_name: str, coc_tag: str, coc_name: str):
     """

@@ -1,13 +1,54 @@
 import discord
 import asyncio
 
+from discord.ext.commands import bot
 
+from database import get_all_links, get_all_members
+from role_giver import update_roles
 
 # Konstanty
 VERIFICATION_CHANNEL_ID = 1365437738467459265
 
 # Uchování informací o ověřování
 verification_tasks = {}
+
+EQUIPMENT_TO_HERO = {
+    "Barbarian Puppet": "Barbarian King",
+    "Snake Bracelet": "Barbarian King",
+    "Giant Gauntlet": "Barbarian King",
+    "Spiky Ball": "Barbarian King",
+    "Rage Vial": "Barbarian King",
+    "Earthquake Boots": "Barbarian King",
+    "Vampstache": "Barbarian King",
+
+    "Archer Puppet": "Archer Queen",
+    "Action Figure": "Archer Queen",
+    "Giant Arrow": "Archer Queen",
+    "Magic Mirror": "Archer Queen",
+    "Invisibility Vial": "Archer Queen",
+    "Healer Puppet": "Archer Queen",
+    "Frozen Arrow": "Archer Queen",
+
+    "Henchmen Puppet": "Minion Prince",
+    "Metal Pants": "Minion Prince",
+    "Dark Orb": "Minion Prince",
+    "Noble Iron": "Minion Prince",
+
+    "Life Gem": "Grand Warden",
+    "Lavaloon Puppet": "Grand Warden",
+    "Fireball": "Grand Warden",
+    "Eternal Tome": "Grand Warden",
+    "Healing Tome": "Grand Warden",
+    "Rage Gem": "Grand Warden",
+
+    "Royale Gem": "Royal Champion",
+    "Hog Rider Puppet": "Royal Champion",
+    "Electro Boots": "Royal Champion",
+    "Seeking Shield": "Royal Champion",
+    "Haste Vial": "Royal Champion",
+    "Rocket Spear": "Royal Champion"
+}
+
 
 async def start_verification_permission(interaction, player, config):
     """
@@ -47,12 +88,12 @@ async def end_verification(user, verification_channel):
     """
 
     await asyncio.sleep(5)
-    await verification_channel.send("🗑️ místnost bude automaticky smazána za 3 sekundy...")
-    await asyncio.sleep(3)
+    await verification_channel.send("🗑️ místnost bude automaticky smazána za 5 sekundy...")
+    await asyncio.sleep(5)
     await verification_channel.delete()
 
 
-async def succesful_verification(user, verification_channel, selected_item, coc_name):
+async def succesful_verification(user, verification_channel, selected_item, coc_name, coc_tag):
     """
     Oznámí úspěšné ověření a smaže verifikační místnost.
     """
@@ -75,15 +116,36 @@ async def succesful_verification(user, verification_channel, selected_item, coc_
         print(f"❌ [verification] Chyba při nastavování přezdívky uživatele {user}: {e}")
         await verification_channel.send(f"❌ chyba při nastavování přezdívky někdo se na to brzo podívá.")
 
+    try:
+        # Zapsání uživatele do databáze
+        from database import add_coc_link
+        add_coc_link(user.id, coc_tag, coc_name)
+        print(f"✅ [verification] Uživatel {user} zapsán do databáze coc_discord_links.")
+    except Exception as e:
+        print(f"❌ [verification] Chyba při zápisu do databáze: {e}")
+        await verification_channel.send(f"❌ chyba při zápisu do databáze někdo se na to brzo podívá.")
 
+    welcome_on_server_message(user)  # Pošle uvítací zprávu do kanálu
     print(f"✅ [verification] Hráč {user} úspěšně ověřen - {selected_item} nasazen.")
 
-async def welcome_on_server_message(player):
+async def welcome_on_server_message(user):
     """
     Pošle úvodní zprávu do nové místnosti.
     """
+    # TODO
     verification_channel= 1365768783083339878
-    await verification_channel.send(f"👋 Ahoj @{player}! Vítej na serveru")
+    await verification_channel.send(f"👋 Ahoj @{user}! Vítej na serveru")
+    update_role_when_new_member(user)
+
+async def update_role_when_new_member(user):
+    """
+    Pošle úvodní zprávu do nové místnosti.
+    """
+    # TODO
+    guild = bot.get_guild(bot.guild_object.id)
+    links = get_all_links()
+    members = get_all_members()
+    await update_roles(guild, links, members)
 
 async def process_verification(player_data, user, verification_channel, selected_item=None):
     if not player_data:
@@ -115,6 +177,10 @@ async def process_verification(player_data, user, verification_channel, selected
             name = item.get("name")
             level = item.get("level", 0)
 
+            # Přidáme podmínku že vybavení musí být v našem seznamu
+            if name not in EQUIPMENT_TO_HERO:
+                continue  # Přeskočíme, pokud vybavení není známé
+
             if name not in equipped_items and level > 1:
                 unequipped_items.append(name)
 
@@ -136,7 +202,7 @@ async def process_verification(player_data, user, verification_channel, selected
 
         embed.add_field(
             name="🎯 Vybrané vybavení k nasazení:",
-            value=f"‎‎‎‎‎‎‎‎‎‎‎‎‎‎‎ **{chosen_item}**",
+            value=f"🔥  **{chosen_item}**  🔥 na hrdinu **{EQUIPMENT_TO_HERO[chosen_item]}**",
             inline=False
         )
 
@@ -147,7 +213,8 @@ async def process_verification(player_data, user, verification_channel, selected
                 "• **2.** Nasaď vybavení uvedené výše\n"
                 "• **3.** **Stačí jen equipnout** - nemusíš odehrát žádný útok ani jiné akce!\n"
                 "• **4.** Bot každých 5 minuty kontroluje změny\n"
-                "• **5.** Jakmile zjistíme změnu, ověření proběhne automaticky dokončeno a bot tě přivítá ✅\n"
+                "• **5.** Jakmile zjistíme změnu, ověření proběhne automaticky a bot tě přivítá ✅\n"
+                "• **6.** Takže nemusíš se vracet zpátky a něco potvrzovat ✅\n"
                 "• **6.** Pokud nestihneš do **20 minut**, ověření expiruje ❌"
             ),
             inline=False
@@ -164,10 +231,10 @@ async def process_verification(player_data, user, verification_channel, selected
     else:
         print(f"🔄 [verification] Kontrola změny pro hráče {user}...")
         if selected_item in equipped_items:
-            await succesful_verification(user, verification_channel, selected_item, player_data["name"])
+            await succesful_verification(user, verification_channel, selected_item, player_data["name"], player_data["tag"])
             return "verified"
         else:
-            await verification_channel.send(f"⏳ Vybavení **{selected_item}** zatím není nasazeno. Další kontrola za 3 minuty...")
+            await verification_channel.send(f"⏳ Vybavení **{selected_item}** zatím není nasazeno. Další kontrola za 5 minuty...")
             print(f"⏳ [verification] Hráč {user} ještě nemá nasazené {selected_item}.")
             return None
 
