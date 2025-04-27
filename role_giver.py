@@ -27,10 +27,17 @@ LEAGUE_ROLES = {
 async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: list[dict]):
     """
     Aktualizuje role hráčům podle dat z databáze:
-    - Přidává Town Hall role
-    - Přidává League role
+    - Přidává/odebírá Town Hall role
+    - Přidává/odebírá League role
     - Spravuje individuální trofejovou roli
+    - Přidává ověřenou roli pokud chybí
     """
+
+    verified_role = guild.get_role(1365768439473373235)  # ID role "Ověřený člen klanu"
+    if not verified_role:
+        print(f"❌ [RoleGiver] Role 'Ověřený člen klanu' s ID 1365768439473373235 nebyla nalezena.")
+        return
+
     for discord_id, (coc_tag, _) in user_mapping.items():
         member = guild.get_member(int(discord_id))
         if not member:
@@ -46,32 +53,42 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
         league_name = player_data.get('league', "Unranked")
         trophies = player_data.get('trophies')
 
-        # === Townhall kontrola ===
-        if townhall_level < 11:
-            print(f"⚠️ [RoleGiver] {member.display_name} má TH{townhall_level}, což je pod limitem 11. Přeskakuji.")
-            continue
+        # === Přidání ověřené role ===
+        if verified_role not in member.roles:
+            try:
+                await member.add_roles(verified_role)
+                print(f"✅ [RoleGiver] Přidána role 'Ověřený člen klanu' uživateli {member.display_name}.")
+            except Exception as e:
+                print(f"❌ [RoleGiver] Chyba při přidávání role ověřeného člena uživateli {member.display_name}: {e}")
 
         # === Nastavení Townhall role ===
-        th_role_id = TOWNHALL_ROLES.get(townhall_level)
-        if th_role_id:
-            th_role = guild.get_role(th_role_id)
-            if th_role:
-                await member.add_roles(th_role)
-                print(f"✅ [RoleGiver] Přidána TH{townhall_level} role hráči {member.display_name}.")
-            else:
-                print(f"⚠️ [RoleGiver] Role TH{townhall_level} s ID {th_role_id} nebyla nalezena.")
+        if townhall_level < 11:
+            print(f"⚠️ [RoleGiver] {member.display_name} má TH{townhall_level}, což je pod limitem 11. Přeskakuji.")
         else:
-            print(f"⚠️ [RoleGiver] Pro TH{townhall_level} není definována role.")
+            th_role_id = TOWNHALL_ROLES.get(townhall_level)
+            if th_role_id:
+                th_role = guild.get_role(th_role_id)
+                if th_role and th_role not in member.roles:
+                    try:
+                        await member.add_roles(th_role)
+                        print(f"✅ [RoleGiver] Přidána TH{townhall_level} role hráči {member.display_name}.")
+                    except Exception as e:
+                        print(f"❌ [RoleGiver] Chyba při přidávání TH role: {e}")
+            else:
+                print(f"⚠️ [RoleGiver] Pro TH{townhall_level} není definována role.")
 
         # === Nastavení League role ===
         league_role_id = LEAGUE_ROLES.get(league_name)
         if league_role_id:
             league_role = guild.get_role(league_role_id)
-            if league_role:
-                await member.add_roles(league_role)
-                print(f"✅ [RoleGiver] Přidána liga {league_name} hráči {member.display_name}.")
-            else:
-                print(f"⚠️ [RoleGiver] Role {league_name} nebyla nalezena.")
+            if league_role and league_role not in member.roles:
+                try:
+                    await member.add_roles(league_role)
+                    print(f"✅ [RoleGiver] Přidána liga {league_name} hráči {member.display_name}.")
+                except Exception as e:
+                    print(f"❌ [RoleGiver] Chyba při přidávání League role: {e}")
+            elif not league_role:
+                print(f"⚠️ [RoleGiver] Role ligy {league_name} nebyla nalezena.")
         else:
             print(f"⚠️ [RoleGiver] Pro ligu {league_name} není definována role.")
 
@@ -80,18 +97,16 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
         new_trophies_name = f"{trophies} Trophies"
 
         if trophies_role:
-            try:
-                await trophies_role.edit(name=new_trophies_name)
-                print(f"♻️ [RoleGiver] Přejmenována role na {new_trophies_name} pro {member.display_name}.")
-            except discord.Forbidden:
-                print(f"❌ [RoleGiver] Nemám právo přejmenovat roli {trophies_role.name}.")
+            if trophies_role.name != new_trophies_name:
+                try:
+                    await trophies_role.edit(name=new_trophies_name)
+                    print(f"♻️ [RoleGiver] Přejmenována role na {new_trophies_name} pro {member.display_name}.")
+                except discord.Forbidden:
+                    print(f"❌ [RoleGiver] Nemám právo přejmenovat roli {trophies_role.name}.")
         else:
             try:
                 new_role = await guild.create_role(name=new_trophies_name, reason="Individuální role pro trofeje")
                 await member.add_roles(new_role)
                 print(f"✅ [RoleGiver] Vytvořena a přiřazena role {new_trophies_name} hráči {member.display_name}.")
-
-                # ⚙️ POZICE ROLE (zatím neřešíme, ale tady to lze nastavovat):
-                # await new_role.edit(position=nějaké_číslo)
             except discord.Forbidden:
                 print(f"❌ [RoleGiver] Nemám právo vytvořit roli {new_trophies_name} pro {member.display_name}.")

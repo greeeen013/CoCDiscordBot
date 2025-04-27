@@ -80,13 +80,13 @@ def start_verification_checker(bot, player_tag, user, verification_channel, conf
     verification_tasks[user.id] = bot.loop.create_task(
         verification_check_loop(bot, player_tag, user, verification_channel, config)
     )
-async def end_verification(verification_channel):
+async def end_verification(user, verification_channel):
     """
     Obnoví práva v hlavním kanálu a smaže verifikační místnost.
     """
 
     await asyncio.sleep(5)
-    await verification_channel.send("🗑️ místnost bude automaticky smazána za 5 sekundy...")
+    await verification_channel.send(f"🗑️ místnost pro {user} bude automaticky smazána za 5 sekundy...")
     await asyncio.sleep(5)
     await verification_channel.delete()
 
@@ -95,15 +95,11 @@ async def succesful_verification(bot, user, verification_channel, selected_item,
     """
     Oznámí úspěšné ověření a smaže verifikační místnost.
     """
+    from scheduler import resume_hourly_update
+
     guild = verification_channel.guild
-    role = guild.get_role(1365768439473373235)  # Získání role podle ID
 
     await verification_channel.send(f"✅ Detekováno nasazení vybavení **{selected_item}**. Ověření dokončeno!")
-    # Přidání role uživateli
-    if role:
-        await user.add_roles(role)
-        print(f"✅ [verification] Role {role.name} byla přidána uživateli {user}.")
-        await verification_channel.send(f"✅ přidána role **{role.name}**.")
 
     # Nastavení přezdívky podle jména v klanu
     try:
@@ -123,7 +119,8 @@ async def succesful_verification(bot, user, verification_channel, selected_item,
         print(f"❌ [verification] Chyba při zápisu do databáze: {e}")
         await verification_channel.send(f"❌ chyba při zápisu do databáze někdo se na to brzo podívá.")
 
-    await end_verification(verification_channel)  # Zavolá funkci pro ukončení ověření
+    resume_hourly_update()  # Obnoví hodinový update
+    await end_verification(user, verification_channel)  # Zavolá funkci pro ukončení ověření
     print(f"✅ [verification] posíám welcome_on_server_message pro {user}...")
     await welcome_on_server_message(bot, user)  # Pošle uvítací zprávu do kanálu
 
@@ -165,7 +162,7 @@ async def welcome_on_server_message(bot, user):
     embed.set_footer(text="⚔️ Clash of Clans tým ti přeje příjemnou zábavu!")
 
     await channel.send(embed=embed)
-    print(f"❌ [verification] Do welcome kanálu byla odeslaná welcome zpráva.")
+    print(f"ℹ️ [verification] Do welcome kanálu byla odeslaná welcome zpráva. pro {user}")
 
 
 async def update_role_when_new_member(bot, user):
@@ -173,7 +170,7 @@ async def update_role_when_new_member(bot, user):
     Aktualizuje role novému členovi (po ověření).
     """
 
-    print(f"❌ [verification] Updatím role pro uživatele {user}...")
+    print(f"🔄 [verification] Updatím role pro uživatele {user}...")
     guild = bot.get_guild(bot.guild_object.id)  # Správně získáme guildu přes instanci bota
     links = get_all_links()
     members = get_all_members()
