@@ -98,7 +98,18 @@ def update_or_create_members(data: list[dict]):
                         c.execute("""
                             INSERT INTO clan_members VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, tuple(values.values()))
+
+                        # Krásné a detailní vypsání statistik
                         print(f"🆕 [database] Přidán nový člen: {values['name']} ({tag})")
+                        print("📊 Statistiky:")
+                        print(f" • 🏰 TownHall Level: {values.get('townHallLevel', 'N/A')}")
+                        print(f" • 🏅 League: {values.get('league', 'N/A')}")
+                        print(f" • 🏆 Trofeje: {values.get('trophies', 'N/A')}")
+                        print(f" • 🔨 Builder Base Trofeje: {values.get('builderBaseTrophies', 'N/A')}")
+                        print(f" • 🏆 Clan Rank: {values.get('clanRank', 'N/A')}")
+                        print(f" • ⬆️ Previous Clan Rank: {values.get('previousClanRank', 'N/A')}")
+                        print(f" • 🛠️ Builder Base League: {values.get('builderBaseLeague', 'N/A')}")
+                        print(f" • 👑 Role v klanu: {values.get('role', 'N/A')}")
                     else:
                         changes = []
                         for i, key in enumerate(TRACKED_FIELDS):
