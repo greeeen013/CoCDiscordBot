@@ -13,15 +13,19 @@ async def hourly_clan_update(config: dict, bot):
     Periodicky stahuje seznam členů klanu každou hodinu,
     aktualizuje databázi a zprávu s výběrem účtu.
     """
-    guild = bot.get_guild(bot.guild_object.id)
     while True:
         if not is_hourly_paused:
+            guild = bot.get_guild(config["GUILD_ID"])
+            if guild is None:
+                print(f"❌ [Scheduler] Guild s ID {config['GUILD_ID']} nebyl nalezen.")
+                await asyncio.sleep(60)  # Počkej 1 minutu a zkus znovu
+                continue
 
-            print("🔁 [scheduler] Spouštím aktualizaci seznamu členů klanu...")
+            print("🔁 [Scheduler] Spouštím aktualizaci seznamu členů klanu...")
             data = await fetch_clan_members_list(config["CLAN_TAG"], config)
             if data:
                 # clan informace
-                print(f"✅ [scheduler] Načteno {len(data.get('items', []))} členů klanu.")
+                print(f"✅ [Scheduler] Načteno {len(data.get('items', []))} členů klanu.")
                 process_clan_data(data.get("items", []))
 
             print("🔄 [Scheduler] Spouštím automatickou aktualizaci rolí...")
@@ -29,13 +33,10 @@ async def hourly_clan_update(config: dict, bot):
             members = get_all_members()
             await update_roles(guild, links, members)
             print("✅ [Scheduler] Aktualizace rolí dokončena.")
-
-
-
         else:
-            print("⏸️ [scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
+            print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(3600/4)  # Spí 0,25 hodinu
+        await asyncio.sleep(3600 / 4)  # Spí 0,25 hodiny
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
@@ -74,7 +75,7 @@ async def verification_check_loop(bot, player_tag, user, verification_channel, c
         resume_hourly_update()
         return
 
-    selected_item = await process_verification(player_data, user, verification_channel)
+    selected_item = await process_verification(bot, player_data, user, verification_channel)
 
     if not selected_item:
         print(f"❌ [scheduler] Nepodařilo se vybrat vybavení pro hráče {user}.")
@@ -94,7 +95,7 @@ async def verification_check_loop(bot, player_tag, user, verification_channel, c
         print(f"🔄 [scheduler] Pokus {tries}/6 - ověřuji hráče {user}...")
         if player_data:
             print(f"🔄 [scheduler] volám funkci process_verification pro hráče {user}...")
-            result = await process_verification(player_data, user, verification_channel, selected_item)
+            result = await process_verification(bot, player_data, user, verification_channel, selected_item)
             if result == "verified":
                 print(f"🏁 [scheduler] Ověření hráče {user} dokončeno úspěšně.")
                 await end_verification(user, verification_channel)

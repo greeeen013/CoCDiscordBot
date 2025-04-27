@@ -250,11 +250,10 @@ class MyBot(commands.Bot): # Definice hlavního bota
         except Exception as e: # Pokud dojde k chybě při synchronizaci, vypíše chybu do konzole.
             print(f"❌ [bot_commands] Chyba při synchronizaci příkazů: {e}")
 
-        asyncio.create_task(hourly_clan_update(self.config, self)) # Spustí funkci na aktualizaci členů každou hodinu na pozadí.
-
     async def on_ready(self):
         print(f"✅🤖 Přihlášen jako {self.user}") # Když je bot přihlášený, vypíše info do konzole.
         self.add_view(VerifikacniView())
+        asyncio.create_task(hourly_clan_update(self.config, self)) # Spustí funkci na aktualizaci členů každou hodinu na pozadí.
 
     async def potvrdit_hrace(self, interaction, player):
         embed = discord.Embed(

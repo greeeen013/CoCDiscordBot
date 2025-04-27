@@ -1,8 +1,6 @@
 import discord
 import asyncio
 
-from discord.ext.commands import bot
-
 from database import get_all_links, get_all_members
 from role_giver import update_roles
 
@@ -82,7 +80,7 @@ def start_verification_checker(bot, player_tag, user, verification_channel, conf
     verification_tasks[user.id] = bot.loop.create_task(
         verification_check_loop(bot, player_tag, user, verification_channel, config)
     )
-async def end_verification(user, verification_channel):
+async def end_verification(verification_channel):
     """
     Obnoví práva v hlavním kanálu a smaže verifikační místnost.
     """
@@ -93,7 +91,7 @@ async def end_verification(user, verification_channel):
     await verification_channel.delete()
 
 
-async def succesful_verification(user, verification_channel, selected_item, coc_name, coc_tag):
+async def succesful_verification(bot, user, verification_channel, selected_item, coc_name, coc_tag):
     """
     Oznámí úspěšné ověření a smaže verifikační místnost.
     """
@@ -125,29 +123,65 @@ async def succesful_verification(user, verification_channel, selected_item, coc_
         print(f"❌ [verification] Chyba při zápisu do databáze: {e}")
         await verification_channel.send(f"❌ chyba při zápisu do databáze někdo se na to brzo podívá.")
 
-    welcome_on_server_message(user)  # Pošle uvítací zprávu do kanálu
-    print(f"✅ [verification] Hráč {user} úspěšně ověřen - {selected_item} nasazen.")
+    await end_verification(verification_channel)  # Zavolá funkci pro ukončení ověření
+    print(f"✅ [verification] posíám welcome_on_server_message pro {user}...")
+    await welcome_on_server_message(bot, user)  # Pošle uvítací zprávu do kanálu
 
-async def welcome_on_server_message(user):
-    """
-    Pošle úvodní zprávu do nové místnosti.
-    """
-    # TODO
-    verification_channel= 1365768783083339878
-    await verification_channel.send(f"👋 Ahoj @{user}! Vítej na serveru")
-    update_role_when_new_member(user)
+    await update_role_when_new_member(bot, user)
+    print(f"✅ [verification] Hráč {user} úspěšně ověřen - {selected_item} nasazen. ✅")
 
-async def update_role_when_new_member(user):
+async def welcome_on_server_message(bot, user):
     """
-    Pošle úvodní zprávu do nové místnosti.
+    Pošle úvodní zprávu do uvítací místnosti pomocí embed zprávy.
     """
-    # TODO
-    guild = bot.get_guild(bot.guild_object.id)
+
+    welcome_channel_id = 1365768783083339878 # ID uvítací místnosti
+    rules_channel_id = 1366000196991062086 # ID kanálu s pravidly
+    admin_user_id = 317724566426222592  # Tvoje Discord ID pro kontakt
+
+    channel = bot.get_channel(welcome_channel_id)
+
+    if not channel:
+        print(f"❌ [welcome_on_server_message] Kanál s ID {welcome_channel_id} nebyl nalezen.")
+        return
+
+    embed = discord.Embed(
+        title="👋 Vítej na serveru našeho klanu Clash of Clans!",
+        description=f"{user.mention}, vítej mezi námi!",
+        color=discord.Color.blue()
+    )
+
+    embed.add_field(
+        name="📜 První kroky:",
+        value=(
+            f"• Přečti si prosím [**pravidla serveru**](https://discord.com/channels/{channel.guild.id}/{rules_channel_id}).\n"
+            "• Respektuj ostatní členy a chovej se slušně.\n"
+            "• A užívej hlavně zábavy.\n"
+            f"• Pokud si s něčím nebudeš vědět rady, **napiš zprávu do DMs <@{admin_user_id}>**. 💬"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="⚔️ Clash of Clans tým ti přeje příjemnou zábavu!")
+
+    await channel.send(embed=embed)
+    print(f"❌ [verification] Do welcome kanálu byla odeslaná welcome zpráva.")
+
+
+async def update_role_when_new_member(bot, user):
+    """
+    Aktualizuje role novému členovi (po ověření).
+    """
+
+    print(f"❌ [verification] Updatím role pro uživatele {user}...")
+    guild = bot.get_guild(bot.guild_object.id)  # Správně získáme guildu přes instanci bota
     links = get_all_links()
     members = get_all_members()
     await update_roles(guild, links, members)
 
-async def process_verification(player_data, user, verification_channel, selected_item=None):
+async def process_verification(bot, player_data, user, verification_channel, selected_item=None):
+    import random # Import random pro generování náhodného čísla aby to našlo true random equipment
+
     if not player_data:
         await verification_channel.send("❌ Nepodařilo se načíst data hráče.")
         print(f"❌ [verification] Chyba: hráč {user} - data None.")
@@ -189,7 +223,7 @@ async def process_verification(player_data, user, verification_channel, selected
             print(f"❌ [verification] Hráč {user} - žádné vhodné vybavení.")
             return None
 
-        chosen_item = unequipped_items[0]
+        chosen_item = random.choice(unequipped_items)
 
         print(f"🎯 [verification Debug] Hledám nasazení itemu: {chosen_item}")
         print(f"🎯 [verification Debug] Aktuálně nasazené předměty: {equipped_items}")
@@ -215,7 +249,7 @@ async def process_verification(player_data, user, verification_channel, selected
                 "• **4.** Bot každých 5 minuty kontroluje změny\n"
                 "• **5.** Jakmile zjistíme změnu, ověření proběhne automaticky a bot tě přivítá ✅\n"
                 "• **6.** Takže nemusíš se vracet zpátky a něco potvrzovat ✅\n"
-                "• **6.** Pokud nestihneš do **20 minut**, ověření expiruje ❌"
+                "• **7.** Pokud nestihneš do **20 minut**, ověření expiruje ❌"
             ),
             inline=False
         )
@@ -231,7 +265,7 @@ async def process_verification(player_data, user, verification_channel, selected
     else:
         print(f"🔄 [verification] Kontrola změny pro hráče {user}...")
         if selected_item in equipped_items:
-            await succesful_verification(user, verification_channel, selected_item, player_data["name"], player_data["tag"])
+            await succesful_verification(bot, user, verification_channel, selected_item, player_data["name"], player_data["tag"])
             return "verified"
         else:
             await verification_channel.send(f"⏳ Vybavení **{selected_item}** zatím není nasazeno. Další kontrola za 5 minuty...")
