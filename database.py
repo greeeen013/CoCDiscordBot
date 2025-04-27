@@ -1,5 +1,4 @@
 import os
-import json
 import sqlite3
 
 # === Cesta k souboru databáze ===
@@ -50,6 +49,7 @@ def create_database():
                 )
             ''')
             conn.commit()
+            conn.close()
             print("✅ [database] Databáze a tabulky vytvořeny.")
     except Exception as e:
         print(f"❌ [database] Chyba při vytváření databáze: {e}")
@@ -150,6 +150,8 @@ def update_or_create_members(data: list[dict]):
     except Exception as e:
         print(f"❌ [database] Chyba při zápisu do databáze: {e}")
 
+    conn.close()
+
 # === Hlavní řídící funkce pro práci s databází ===
 def process_clan_data(data: list[dict]):
     """
@@ -170,9 +172,7 @@ def process_clan_data(data: list[dict]):
 
 def get_all_links():
     """
-    Vrátí záznam propojení mezi Discord jménem a CoC účtem.
-    vstup: nic
-    vrátí: tag a jménem CoC účtu nebo None, pokud neexistuje
+    Vrátí záznam propojení mezi Discord ID a CoC účtem.
     """
     conn = sqlite3.connect("coc_data_info.sqlite3")
     cursor = conn.cursor()
@@ -182,10 +182,10 @@ def get_all_links():
 
     conn.close()
 
-    # Předěláme na formát {discord_id: (coc_tag, coc_name)}
+    # Předěláme správně na formát {discord_id: (coc_tag, coc_name)}
     result = {}
-    for discord_name, coc_tag, coc_name in rows:
-        result[discord_name] = (coc_tag, coc_name)
+    for discord_id, coc_tag, coc_name in rows:
+        result[int(discord_id)] = (coc_tag, coc_name)
 
     return result
 
@@ -203,6 +203,7 @@ def add_coc_link(discord_name: str, coc_tag: str, coc_name: str):
                 VALUES (?, ?, ?)
             """, (discord_name, coc_tag, coc_name))
             conn.commit()
+            conn.close()
             print(f"✅ [database] Propojení uloženo pro {discord_name} → {coc_tag} ({coc_name})")
     except Exception as e:
         print(f"❌ [database] Chyba při ukládání propojení: {e}")
@@ -217,6 +218,7 @@ def remove_coc_link(discord_name: str):
             c = conn.cursor()
             c.execute("DELETE FROM coc_discord_links WHERE discord_name = ?", (discord_name,))
             conn.commit()
+            conn.close()
             print(f"🗑️ [database] Propojení odstraněno pro Discord jméno: {discord_name}")
     except Exception as e:
         print(f"❌ [database] Chyba při odstraňování propojení: {e}")

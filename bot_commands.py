@@ -175,6 +175,9 @@ class MyBot(commands.Bot): # Definice hlavního bota
             if not clan_members or not user_mapping:
                 await interaction.followup.send("❌ Chyba: nebyla načtena databáze členů nebo propojení.",
                                                 ephemeral=True)
+                print(f"❌ [bot_commands] Chyba: nebyla načtena databáze členů nebo propojení.")
+                print(f"❌ [bot_commands] Členové: {clan_members}")
+                print(f"❌ [bot_commands] Propojení: {user_mapping}")
                 return
 
             # Zavoláme aktualizaci
