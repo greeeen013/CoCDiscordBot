@@ -2,14 +2,20 @@ from dotenv import load_dotenv
 import os
 from bot_commands import start_bot
 
+
 def load_config():
     load_dotenv()
-    return {
-        "COC_API_KEY": os.getenv("COC_API_KEY"),
-        "DISCORD_BOT_TOKEN": os.getenv("DISCORD_BOT_TOKEN"),
-        "GUILD_ID": int(os.getenv("GUILD_ID")),
-        "CLAN_TAG": os.getenv("CLAN_TAG")
-    }
+
+    try:
+        return {
+            "COC_API_KEY": os.getenv("COC_API_KEY"),
+            "DISCORD_BOT_TOKEN": os.getenv("DISCORD_BOT_TOKEN"),
+            "GUILD_ID": int(os.getenv("GUILD_ID")),
+            "CLAN_TAG": os.getenv("CLAN_TAG")
+        }
+    except (TypeError, ValueError) as e:
+        print(f"❌ Chyba v načítání konfigurace: {e}")
+        exit(1)
 
 def main():
     config = load_config()
