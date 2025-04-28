@@ -42,18 +42,18 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
 
     verified_role = guild.get_role(1365768439473373235)  # ID role "Ověřený člen klanu"
     if not verified_role:
-        print(f"❌ [RoleGiver] Role 'Ověřený člen klanu' s ID 1365768439473373235 nebyla nalezena.")
+        print(f"❌ [role_giver] Role 'Ověřený člen klanu' s ID 1365768439473373235 nebyla nalezena.")
         return
 
     for discord_id, (coc_tag, _) in user_mapping.items():
         member = guild.get_member(int(discord_id))
         if not member:
-            print(f"❌ [RoleGiver] Uživatel s ID {discord_id} nebyl nalezen.")
+            print(f"❌ [role_giver] Uživatel s ID {discord_id} nebyl nalezen.")
             continue
 
         player_data = next((p for p in clan_members if p['tag'] == coc_tag), None)
         if not player_data:
-            print(f"❌ [RoleGiver] Clash hráč s tagem {coc_tag} nebyl nalezen v seznamu.")
+            print(f"❌ [role_giver] Clash hráč s tagem {coc_tag} nebyl nalezen v seznamu.")
             continue
 
         townhall_level = player_data.get('townHallLevel')
@@ -85,32 +85,32 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
                     if role.id in clan_role_ids and role != desired_role:
                         try:
                             await member.remove_roles(role, reason="Aktualizace clan role")
-                            print(f"♻️ [RoleGiver] Odebrána stará clan role {role.name} hráči {member.display_name}.")
+                            print(f"♻️ [role_giver] Odebrána stará clan role {role.name} hráči {member.display_name}.")
                         except Exception as e:
-                            print(f"❌ [RoleGiver] Chyba při odebírání clan role {role.name}: {e}")
+                            print(f"❌ [role_giver] Chyba při odebírání clan role {role.name}: {e}")
 
                 # Přidání správné role pokud ji ještě nemá
                 if desired_role not in member.roles:
                     try:
                         await member.add_roles(desired_role)
                         print(
-                            f"✅ [RoleGiver] Přidána správná clan role {desired_role.name} hráči {member.display_name}.")
+                            f"✅ [role_giver] Přidána správná clan role {desired_role.name} hráči {member.display_name}.")
                     except Exception as e:
-                        print(f"❌ [RoleGiver] Chyba při přidávání clan role {desired_role.name}: {e}")
+                        print(f"❌ [role_giver] Chyba při přidávání clan role {desired_role.name}: {e}")
             else:
-                print(f"⚠️ [RoleGiver] Clan role s ID {current_role_id} nebyla nalezena.")
+                print(f"⚠️ [role_giver] Clan role s ID {current_role_id} nebyla nalezena.")
 
         # === Přidání ověřené role ===
         if verified_role not in member.roles:
             try:
                 await member.add_roles(verified_role)
-                print(f"✅ [RoleGiver] Přidána role 'Ověřený člen klanu' uživateli {member.display_name}.")
+                print(f"✅ [role_giver] Přidána role 'Ověřený člen klanu' uživateli {member.display_name}.")
             except Exception as e:
-                print(f"❌ [RoleGiver] Chyba při přidávání role ověřeného člena uživateli {member.display_name}: {e}")
+                print(f"❌ [role_giver] Chyba při přidávání role ověřeného člena uživateli {member.display_name}: {e}")
 
         # 🏰 === Nastavení TownHall role ===
         if townhall_level < 11:
-            print(f"⚠️ [RoleGiver] {member.display_name} má TH{townhall_level}, což je pod limitem 11. Přeskakuji.")
+            print(f"⚠️ [role_giver] {member.display_name} má TH{townhall_level}, což je pod limitem 11. Přeskakuji.")
         else:
             th_role_id = TOWNHALL_ROLES.get(townhall_level)
             if th_role_id:
@@ -122,19 +122,19 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
                         try:
                             await member.remove_roles(role, reason="Aktualizace TownHall role")
                             print(
-                                f"♻️ [RoleGiver] Odebrána stará TownHall role {role.name} hráči {member.display_name}.")
+                                f"♻️ [role_giver] Odebrána stará TownHall role {role.name} hráči {member.display_name}.")
                         except Exception as e:
-                            print(f"❌ [RoleGiver] Chyba při odebírání TownHall role: {e}")
+                            print(f"❌ [role_giver] Chyba při odebírání TownHall role: {e}")
 
                 # ✅ Přidáme správnou TH roli
                 if th_role and th_role not in member.roles:
                     try:
                         await member.add_roles(th_role)
-                        print(f"✅ [RoleGiver] Přidána TH{townhall_level} role hráči {member.display_name}.")
+                        print(f"✅ [role_giver] Přidána TH{townhall_level} role hráči {member.display_name}.")
                     except Exception as e:
-                        print(f"❌ [RoleGiver] Chyba při přidávání TH role: {e}")
+                        print(f"❌ [role_giver] Chyba při přidávání TH role: {e}")
             else:
-                print(f"⚠️ [RoleGiver] Pro TH{townhall_level} není definována role.")
+                print(f"⚠️ [role_giver] Pro TH{townhall_level} není definována role.")
 
 
         # 🏆 === Nastavení League role ===
@@ -150,28 +150,28 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
                 if role.id in LEAGUE_ROLES.values() and role != league_role:
                     try:
                         await member.remove_roles(role, reason="Aktualizace League role")
-                        print(f"♻️ [RoleGiver] Odebrána stará League role {role.name} hráči {member.display_name}.")
+                        print(f"♻️ [role_giver] Odebrána stará League role {role.name} hráči {member.display_name}.")
                     except Exception as e:
-                        print(f"❌ [RoleGiver] Chyba při odebírání League role: {e}")
+                        print(f"❌ [role_giver] Chyba při odebírání League role: {e}")
 
             # ✅ Přidáme správnou ligovou roli
             if league_role and league_role not in member.roles:
                 try:
                     await member.add_roles(league_role)
-                    print(f"✅ [RoleGiver] Přidána liga {base_league_name} hráči {member.display_name}.")
+                    print(f"✅ [role_giver] Přidána liga {base_league_name} hráči {member.display_name}.")
                 except Exception as e:
-                    print(f"❌ [RoleGiver] Chyba při přidávání League role: {e}")
+                    print(f"❌ [role_giver] Chyba při přidávání League role: {e}")
         else:
-            print(f"⚠️ [RoleGiver] Pro ligu {base_league_name} není definována role.")
+            print(f"⚠️ [role_giver] Pro ligu {base_league_name} není definována role.")
 
         # 🧹 Čištění starých trofejových rolí bez členů
         for role in guild.roles:
             if "Pohárků" in role.name and len(role.members) == 0:
                 try:
                     await role.delete(reason="Čištění nevyužívaných trofejových rolí")
-                    print(f"🗑️ [RoleGiver] Smazána neaktivní trofejová role: {role.name}")
+                    print(f"🗑️ [role_giver] Smazána neaktivní trofejová role: {role.name}")
                 except discord.Forbidden:
-                    print(f"❌ [RoleGiver] Nemám právo smazat roli: {role.name}")
+                    print(f"❌ [role_giver] Nemám právo smazat roli: {role.name}")
 
         # === Správa individuální trofejové role ===
         # Vždy hledáme, jestli existuje role s novým jménem
@@ -183,24 +183,24 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
             if existing_role not in member.roles:
                 try:
                     await member.add_roles(existing_role)
-                    print(f"✅ [RoleGiver] Přiřazena existující role {new_trophies_name} hráči {member.display_name}.")
+                    print(f"✅ [role_giver] Přiřazena existující role {new_trophies_name} hráči {member.display_name}.")
                 except discord.Forbidden:
-                    print(f"❌ [RoleGiver] Nemám právo přiřadit existující roli {existing_role.name}.")
+                    print(f"❌ [role_giver] Nemám právo přiřadit existující roli {existing_role.name}.")
         else:
             # Role neexistuje -> vytvořit novou
             try:
                 new_role = await guild.create_role(name=new_trophies_name, reason="Individuální role pro trofeje")
                 await member.add_roles(new_role)
-                print(f"✅ [RoleGiver] Vytvořena a přiřazena nová role {new_trophies_name} hráči {member.display_name}.")
+                print(f"✅ [role_giver] Vytvořena a přiřazena nová role {new_trophies_name} hráči {member.display_name}.")
             except discord.Forbidden:
-                print(f"❌ [RoleGiver] Nemám právo vytvořit roli {new_trophies_name} pro {member.display_name}.")
+                print(f"❌ [role_giver] Nemám právo vytvořit roli {new_trophies_name} pro {member.display_name}.")
 
         # A navíc, smažeme starou trofejovou roli, pokud existuje a není stejná
         trophies_role = next((r for r in member.roles if "Pohárků" in r.name and r.name != new_trophies_name), None)
         if trophies_role:
             try:
                 await member.remove_roles(trophies_role, reason="Nahrazení novou trofejovou rolí")
-                print(f"♻️ [RoleGiver] Odebrána stará trofejová role {trophies_role.name} hráči {member.display_name}.")
+                print(f"♻️ [role_giver] Odebrána stará trofejová role {trophies_role.name} hráči {member.display_name}.")
             except discord.Forbidden:
                 print(
-                    f"❌ [RoleGiver] Nemám právo odebrat starou roli {trophies_role.name} hráči {member.display_name}.")
+                    f"❌ [role_giver] Nemám právo odebrat starou roli {trophies_role.name} hráči {member.display_name}.")

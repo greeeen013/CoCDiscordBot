@@ -108,7 +108,7 @@ async def succesful_verification(bot, user, verification_channel, selected_item,
         await verification_channel.send(f"✅ přidána přezdívka  **{user}** nastavena na **{coc_name}**.")
     except Exception as e:
         print(f"❌ [verification] Chyba při nastavování přezdívky uživatele {user}: {e}")
-        await verification_channel.send(f"❌ chyba při nastavování přezdívky někdo se na to brzo podívá.")
+        await verification_channel.send(f"❌ chyba při nastavování přezdívky, někdo se na to brzo podívá.")
 
     try:
         # Zapsání uživatele do databáze

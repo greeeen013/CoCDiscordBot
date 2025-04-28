@@ -158,6 +158,25 @@ class MyBot(commands.Bot): # Definice hlavního bota
         self.config = config # Konfigurace bota (tokeny atd.)
 
     async def setup_hook(self):
+        # /clear příkaz pro moderátory
+        @self.tree.command(name="clear", description="Vyčistí zadaný počet zpráv v kanálu", guild=self.guild_object)
+        @app_commands.describe(pocet="Kolik zpráv smazat (výchozí 10)")
+        async def clear(interaction: discord.Interaction, pocet: int = 10):
+            if not interaction.user.guild_permissions.manage_messages:
+                await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+                return
+
+            await interaction.response.defer(ephemeral=True, thinking=True)
+
+            try:
+                deleted = await interaction.channel.purge(limit=pocet)
+                await interaction.followup.send(f"✅ Smazáno {len(deleted)} zpráv.", ephemeral=True)
+            except discord.Forbidden:
+                await interaction.followup.send("❌ Nemám právo mazat zprávy v tomto kanálu.", ephemeral=True)
+            except Exception as e:
+                await interaction.followup.send(f"❌ Došlo k chybě při mazání zpráv: {e}", ephemeral=True)
+
+        # /aktualizujrole příkaz pro administrátory
         @self.tree.command(name="aktualizujrole", description="Aktualizuje role všech propojených členů",
                            guild=self.guild_object)
         async def aktualizujrole(interaction: discord.Interaction):
@@ -196,9 +215,10 @@ class MyBot(commands.Bot): # Definice hlavního bota
                 title="✅ Ověření účtu Clash of Clans",
                 description=(
                     "**Klikni na tlačítko níže a ověř si svůj účet!**\n\n"
-                    "- Po kliknutí zadáš své jméno nebo tag.\n"
+                    "- Po kliknutí zadáš své jméno nebo #tag.\n"
                     "- Budeš proveden procesem ověření.\n"
-                    "- Tento kanál slouží pouze k ověření – psaní zpráv není povoleno."
+                    "- Tento kanál slouží pouze k ověření – psaní zpráv není povoleno.\n"
+                    "- Pokud jsi již ověřený, nebudeš moci ověřit znovu.\n"
                 ),
                 color=discord.Color.green()
             )
