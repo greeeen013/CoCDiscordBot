@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 import os
-from bot_commands import start_bot
+from discord_bot import start_bot
 
 
 def load_config():
