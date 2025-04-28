@@ -5,7 +5,7 @@ from database import get_all_links, get_all_members
 from role_giver import update_roles
 
 # Konstanty
-VERIFICATION_CHANNEL_ID = 1365437738467459265
+VERIFICATION_CHANNEL_ID = 1366471838070476821
 
 # Uchování informací o ověřování
 verification_tasks = {}
@@ -143,7 +143,7 @@ async def welcome_on_server_message(bot, user):
         return
 
     embed = discord.Embed(
-        title="👋 Vítej na serveru našeho klanu Clash of Clans!",
+        title="👋 Vítej na serveru našeho klanu Czech Heroes!",
         description=f"{user.mention}, vítej mezi námi!",
         color=discord.Color.blue()
     )
@@ -159,7 +159,7 @@ async def welcome_on_server_message(bot, user):
         inline=False
     )
 
-    embed.set_footer(text="⚔️ Clash of Clans tým ti přeje příjemnou zábavu!")
+    embed.set_footer(text="⚔️ Klan Czech Heroes ti přeje příjemnou zábavu!")
 
     await channel.send(embed=embed)
     print(f"ℹ️ [verification] Do welcome kanálu byla odeslaná welcome zpráva. pro {user}")
