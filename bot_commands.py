@@ -159,9 +159,9 @@ class MyBot(commands.Bot): # Definice hlavního bota
 
     async def setup_hook(self):
         # /clear příkaz pro moderátory
-        @self.tree.command(name="clear", description="Vyčistí zadaný počet zpráv v kanálu", guild=self.guild_object)
-        @app_commands.describe(pocet="Kolik zpráv smazat (výchozí 10)")
-        async def clear(interaction: discord.Interaction, pocet: int = 10):
+        @self.tree.command(name="clear", description="Vyčistí kanál nebo zadaný počet zpráv", guild=self.guild_object)
+        @app_commands.describe(pocet="Kolik zpráv smazat (nebo prázdné = kompletní vymazání)")
+        async def clear(interaction: discord.Interaction, pocet: int = 0):
             if not interaction.user.guild_permissions.manage_messages:
                 await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
                 return
@@ -169,8 +169,24 @@ class MyBot(commands.Bot): # Definice hlavního bota
             await interaction.response.defer(ephemeral=True, thinking=True)
 
             try:
-                deleted = await interaction.channel.purge(limit=pocet)
-                await interaction.followup.send(f"✅ Smazáno {len(deleted)} zpráv.", ephemeral=True)
+                total_deleted = 0
+
+                if pocet > 0:
+                    # Pokud je zadán počet, smažeme jen tolik
+                    deleted = await interaction.channel.purge(limit=pocet)
+                    total_deleted = len(deleted)
+                else:
+                    # Pokud počet není zadán, smažeme "všechno" postupně
+                    while True:
+                        deleted = await interaction.channel.purge(limit=100)
+                        total_deleted += len(deleted)
+
+                        if len(deleted) < 100:
+                            # Když se smaže méně než 100, pravděpodobně jsme na konci
+                            break
+
+                await interaction.followup.send(f"✅ Vymazáno {total_deleted} zpráv v kanálu.", ephemeral=True)
+
             except discord.Forbidden:
                 await interaction.followup.send("❌ Nemám právo mazat zprávy v tomto kanálu.", ephemeral=True)
             except Exception as e:
