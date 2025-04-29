@@ -19,15 +19,6 @@ TOWN_HALL_EMOJIS = {
     12: "<:town_hall_12:1365445398411477082>",
     11: "<:town_hall_11:1365445395173347458>",
     10: "<:town_hall_10:1365445393680437369>",
-    9: "",
-    8: "",
-    7: "",
-    6: "",
-    5: "",
-    4: "",
-    3: "",
-    2: "",
-    1: "",
     # atd...
 } # Definování emoji pro jednotlivé úrovně Town Hall (TH) v Clash of Clans
 LEAGUES = {

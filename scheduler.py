@@ -33,6 +33,8 @@ async def hourly_clan_update(config: dict, bot):
             members = get_all_members()
             await update_roles(guild, links, members)
             print("✅ [Scheduler] Aktualizace rolí dokončena.")
+
+
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 

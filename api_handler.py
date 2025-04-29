@@ -52,3 +52,29 @@ async def fetch_player_data(player_tag: str, config: dict) -> dict | None:
             else:
                 print(f"❌ [api_handler] Chyba při načítání hráče {player_tag}: {response.status}")
                 return None
+
+async def fetch_current_war(clan_tag: str, config: dict):
+    """Fetch current war data from Clash of Clans API"""
+    url = f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}/currentwar"
+    headers = {
+        "Authorization": f"Bearer {config['COC_API_KEY']}",
+        "Accept": "application/json"
+    }
+
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url, headers=headers, timeout=10) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                elif resp.status == 404:
+                    print(f"❌ [API] Clan war data not found (404) for clan {clan_tag}")
+                    return None
+                else:
+                    print(f"❌ [API] Error fetching war data: {resp.status} - {await resp.text()}")
+                    return None
+        except asyncio.TimeoutError:
+            print("❌ [API] Timeout while fetching war data")
+            return None
+        except Exception as e:
+            print(f"❌ [API] Unexpected error fetching war data: {str(e)}")
+            return None
