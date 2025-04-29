@@ -65,17 +65,17 @@ async def fetch_current_war(clan_tag: str, config: dict):
         try:
             async with session.get(url, headers=headers, timeout=10) as resp:
                 if resp.status == 200:
-                    print(f"[api_handler] Úspěšně získána data o válce pro klan {clan_tag}")
+                    print(f"✅ [api_handler] Úspěšně získána data o válce pro klan {clan_tag}")
                     return await resp.json()
                 elif resp.status == 404:
-                    print(f"[api_handler] ❌ Data o válce nenalezena (404) pro klan {clan_tag}")
+                    print(f"❌ [api_handler] Data o válce nenalezena (404) pro klan {clan_tag}")
                     return None
                 else:
-                    print(f"[api_handler] ❌ Chyba při získávání dat o válce: {resp.status} - {await resp.text()}")
+                    print(f"❌ [api_handler] Chyba při získávání dat o válce: {resp.status} - {await resp.text()}")
                     return None
         except asyncio.TimeoutError:
-            print("[api_handler] ❌ Timeout při získávání dat o válce")
+            print("❌ [api_handler] Timeout při získávání dat o válce")
             return None
         except Exception as e:
-            print(f"[api_handler] ❌ Neočekávaná chyba: {str(e)}")
+            print(f"❌ [api_handler] Neočekávaná chyba: {str(e)}")
             return None

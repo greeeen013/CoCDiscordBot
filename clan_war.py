@@ -75,7 +75,7 @@ class ClanWarHandler:
         """Vytvoří nebo aktualizuje embed se stavem války"""
         channel = self.bot.get_channel(self.war_status_channel_id)
         if not channel:
-            print("[clan_war] ❌ Kanál pro stav války nebyl nalezen")
+            print("❌ [clan_war] Kanál pro stav války nebyl nalezen")
             return
 
         embed = self._create_war_status_embed(war_data)
@@ -94,7 +94,7 @@ class ClanWarHandler:
                 self.current_war_message_id = message.id
 
         except Exception as e:
-            print(f"[clan_war] ❌ Chyba při aktualizaci stavu války: {str(e)}")
+            print(f"❌ [clan_war] Chyba při aktualizaci stavu války: {str(e)}")
 
     def _create_war_status_embed(self, war_data: dict) -> discord.Embed:
         """Vytvoří embed se stavem války"""
@@ -167,7 +167,7 @@ class ClanWarHandler:
         """Zpracuje nové události ve válce (útoky)"""
         channel = self.bot.get_channel(self.war_events_channel_id)
         if not channel:
-            print("[clan_war] ❌ Kanál pro události války nebyl nalezen")
+            print("❌ [clan_war] Kanál pro události války nebyl nalezen")
             return
 
         attacks = []
@@ -199,7 +199,7 @@ class ClanWarHandler:
 
         # Double-check pro Discord ping
         if discord_mention:
-            print(f"[clan_war] ✅ Nalezen Discord uživatel pro tag {attack.get('attackerTag')}: {discord_mention}")
+            print(f"✅ [clan_war] Nalezen Discord uživatel pro tag {attack.get('attackerTag')}: {discord_mention}")
 
         embed = discord.Embed(
             color=discord.Color.green() if attack.get('stars', 0) == 3 else
@@ -241,3 +241,34 @@ class ClanWarHandler:
         embed.set_footer(text=f"Útok #{attack.get('order', 0)} | Trvání: {attack.get('duration', 0)}s")
 
         await channel.send(embed=embed)
+
+    def _find_member_by_tag(self, tag: str, war_data: dict) -> Optional[dict]:
+        """Najde člena podle tagu"""
+        if not tag:
+            return None
+        for member in war_data.get('clan', {}).get('members', []):
+            if member.get('tag') == tag:
+                return member
+        for member in war_data.get('opponent', {}).get('members', []):
+            if member.get('tag') == tag:
+                return member
+        return None
+
+    async def _get_discord_mention(self, coc_tag: str) -> Optional[str]:
+        """Získá Discord mention propojeného uživatele"""
+        from database import get_all_links
+        links = get_all_links()
+        for discord_id, (tag, _) in links.items():
+            if tag == coc_tag:
+                member = self.bot.get_guild(self.config['DISCORD_GUILD_ID']).get_member(discord_id)
+                if member:
+                    print(f"[clan_war] Nalezen propojený uživatel: {member.display_name} ({member.id})")
+                    return member.mention
+        return None
+
+    def _parse_coc_time(self, time_str: str) -> Optional[datetime]:
+        """Parsuje čas z API CoC"""
+        try:
+            return datetime.strptime(time_str, "%Y%m%dT%H%M%S.000Z")
+        except (ValueError, AttributeError):
+            return None
