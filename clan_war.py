@@ -162,3 +162,82 @@ class ClanWarHandler:
 
         embed.set_footer(text=f"Stav války: {state}")
         return embed
+
+    async def process_war_events(self, war_data: dict):
+        """Zpracuje nové události ve válce (útoky)"""
+        channel = self.bot.get_channel(self.war_events_channel_id)
+        if not channel:
+            print("[clan_war] ❌ Kanál pro události války nebyl nalezen")
+            return
+
+        attacks = []
+        for member in war_data.get('clan', {}).get('members', []):
+            attacks.extend(member.get('attacks', []))
+        for member in war_data.get('opponent', {}).get('members', []):
+            attacks.extend(member.get('attacks', []))
+
+        new_attacks = [a for a in attacks if a.get('order', 0) > self.last_processed_order]
+        if not new_attacks:
+            return
+
+        new_attacks.sort(key=lambda x: x.get('order', 0))
+
+        for attack in new_attacks:
+            await self._send_attack_embed(channel, attack, war_data)
+            self.last_processed_order = max(self.last_processed_order, attack.get('order', 0))
+
+    async def _send_attack_embed(self, channel, attack: dict, war_data: dict):
+        """Vytvoří embed pro jeden útok"""
+        attacker = self._find_member_by_tag(attack.get('attackerTag'), war_data)
+        defender = self._find_member_by_tag(attack.get('defenderTag'), war_data)
+
+        if not attacker or not defender:
+            return
+
+        is_our_attack = any(m.get('tag') == attacker.get('tag') for m in war_data.get('clan', {}).get('members', []))
+        discord_mention = await self._get_discord_mention(attack.get('attackerTag'))
+
+        # Double-check pro Discord ping
+        if discord_mention:
+            print(f"[clan_war] ✅ Nalezen Discord uživatel pro tag {attack.get('attackerTag')}: {discord_mention}")
+
+        embed = discord.Embed(
+            color=discord.Color.green() if attack.get('stars', 0) == 3 else
+            discord.Color.orange() if attack.get('stars', 0) >= 1 else
+            discord.Color.red()
+        )
+
+        if is_our_attack:
+            left_side = attacker
+            right_side = defender
+            action = "**ÚTOK** ⚔️"
+            arrow = "➡️"
+        else:
+            left_side = defender
+            right_side = attacker
+            action = "**OBRANA** 🛡️"
+            arrow = "⬅️"
+
+        # Levá strana (náš hráč)
+        left_field = (
+            f"{discord_mention or ''}\n"
+            f"{TOWN_HALL_EMOJIS.get(left_side.get('townhallLevel', 10), '')} {left_side.get('name', 'Unknown')}"
+        )
+
+        # Prostřední akce
+        middle_field = (
+            f"{action}\n"
+            f"{arrow}   {'⭐' * attack.get('stars', 0)}\n"
+            f"   {attack.get('destructionPercentage', 0)}%"
+        )
+
+        # Pravá strana (protivník)
+        right_field = f"{TOWN_HALL_EMOJIS.get(right_side.get('townhallLevel', 10), '')} {right_side.get('name', 'Unknown')}"
+
+        embed.add_field(name="\u200b", value=left_field, inline=True)
+        embed.add_field(name="\u200b", value=middle_field, inline=True)
+        embed.add_field(name="\u200b", value=right_field, inline=True)
+
+        embed.set_footer(text=f"Útok #{attack.get('order', 0)} | Trvání: {attack.get('duration', 0)}s")
+
+        await channel.send(embed=embed)
