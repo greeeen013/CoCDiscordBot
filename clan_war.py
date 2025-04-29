@@ -26,7 +26,7 @@ class ClanWarHandler:
     async def process_war_data(self, war_data: dict):
         """Zpracuje data o válce a aktualizuje Discord"""
         if not war_data:
-            print("[clan_war] ❌ Žádná data o válce ke zpracování")
+            print("❌ [clan_war] Žádná data o válce ke zpracování")
             return
 
         state = war_data.get('state', 'unknown')
@@ -49,6 +49,25 @@ class ClanWarHandler:
                 await self.process_war_events(war_data)
 
         except Exception as e:
-            print(f"[clan_war] ❌ Chyba při zpracování dat: {str(e)}")
+            print(f"❌ [clan_war] Chyba při zpracování dat: {str(e)}")
 
-    
+    async def _clear_war_channels(self):
+        """Smaže obsah war kanálů"""
+        try:
+            status_channel = self.bot.get_channel(self.war_status_channel_id)
+            events_channel = self.bot.get_channel(self.war_events_channel_id)
+
+            if status_channel:
+                await status_channel.purge(limit=100)
+                print("[clan_war] Obsah kanálu se stavem války byl smazán")
+
+            if events_channel:
+                await events_channel.purge(limit=100)
+                print("[clan_war] Obsah kanálu s událostmi války byl smazán")
+
+            self.current_war_message_id = None
+            self.last_processed_order = 0
+
+        except Exception as e:
+            print(f"❌ [clan_war] Chyba při mazání kanálů: {str(e)}")
+
