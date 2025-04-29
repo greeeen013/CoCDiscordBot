@@ -54,7 +54,7 @@ async def fetch_player_data(player_tag: str, config: dict) -> dict | None:
                 return None
 
 async def fetch_current_war(clan_tag: str, config: dict):
-    """Fetch current war data from Clash of Clans API"""
+    """Získává data o aktuální válce z API Clash of Clans"""
     url = f"https://api.clashofclans.com/v1/clans/{clan_tag.replace('#', '%23')}/currentwar"
     headers = {
         "Authorization": f"Bearer {config['COC_API_KEY']}",
@@ -65,16 +65,17 @@ async def fetch_current_war(clan_tag: str, config: dict):
         try:
             async with session.get(url, headers=headers, timeout=10) as resp:
                 if resp.status == 200:
+                    print(f"[api_handler] Úspěšně získána data o válce pro klan {clan_tag}")
                     return await resp.json()
                 elif resp.status == 404:
-                    print(f"❌ [API] Clan war data not found (404) for clan {clan_tag}")
+                    print(f"[api_handler] ❌ Data o válce nenalezena (404) pro klan {clan_tag}")
                     return None
                 else:
-                    print(f"❌ [API] Error fetching war data: {resp.status} - {await resp.text()}")
+                    print(f"[api_handler] ❌ Chyba při získávání dat o válce: {resp.status} - {await resp.text()}")
                     return None
         except asyncio.TimeoutError:
-            print("❌ [API] Timeout while fetching war data")
+            print("[api_handler] ❌ Timeout při získávání dat o válce")
             return None
         except Exception as e:
-            print(f"❌ [API] Unexpected error fetching war data: {str(e)}")
+            print(f"[api_handler] ❌ Neočekávaná chyba: {str(e)}")
             return None
