@@ -71,3 +71,27 @@ class ClanWarHandler:
         except Exception as e:
             print(f"❌ [clan_war] Chyba při mazání kanálů: {str(e)}")
 
+    async def update_war_status(self, war_data: dict):
+        """Vytvoří nebo aktualizuje embed se stavem války"""
+        channel = self.bot.get_channel(self.war_status_channel_id)
+        if not channel:
+            print("[clan_war] ❌ Kanál pro stav války nebyl nalezen")
+            return
+
+        embed = self._create_war_status_embed(war_data)
+
+        try:
+            if self.current_war_message_id:
+                try:
+                    message = await channel.fetch_message(self.current_war_message_id)
+                    await message.edit(embed=embed)
+                except discord.NotFound:
+                    self.current_war_message_id = None
+                    message = await channel.send(embed=embed)
+                    self.current_war_message_id = message.id
+            else:
+                message = await channel.send(embed=embed)
+                self.current_war_message_id = message.id
+
+        except Exception as e:
+            print(f"[clan_war] ❌ Chyba při aktualizaci stavu války: {str(e)}")
