@@ -203,7 +203,6 @@ def add_coc_link(discord_name: str, coc_tag: str, coc_name: str):
                 VALUES (?, ?, ?)
             """, (discord_name, coc_tag, coc_name))
             conn.commit()
-            conn.close()
             print(f"✅ [database] Propojení uloženo pro {discord_name} → {coc_tag} ({coc_name})")
     except Exception as e:
         print(f"❌ [database] Chyba při ukládání propojení: {e}")
