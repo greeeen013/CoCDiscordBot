@@ -2,7 +2,7 @@ import os
 import sqlite3
 
 # === Cesta k souboru databáze ===
-DB_PATH = "coc_data_info.sqlite3"
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coc_data_info.sqlite3")
 
 # === Pole, která budeme ukládat a sledovat pro změny ===
 TRACKED_FIELDS = [
