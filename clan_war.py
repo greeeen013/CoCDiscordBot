@@ -22,6 +22,7 @@ class ClanWarHandler:
         self.war_events_channel_id = 1366835971395686554
         self.last_processed_order = 0
         self.current_war_message_id = None
+        self._last_state = None
 
     async def process_war_data(self, war_data: dict):
         """Zpracuje data o válce a aktualizuje Discord"""
@@ -31,12 +32,14 @@ class ClanWarHandler:
 
         state = war_data.get('state', 'unknown')
 
-        # Pokud válka skončila, smaž obsah kanálů
-        if state == 'warEnded':
+        # Pokud se stav změnil na warEnded, smaž obsah kanálů
+        if state == 'warEnded' and self._last_state != 'warEnded':
             await self._clear_war_channels()
-            return
 
-        # Pokud není ve válce nebo přípravě, nedělej nic
+        # Aktualizuj uložený stav až po kontrole
+        self._last_state = state
+
+        # Pokud není ve válce nebo přípravě, nedělej nic dalšího
         if state not in ('inWar', 'preparation'):
             return
 
