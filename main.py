@@ -1,5 +1,7 @@
 from dotenv import load_dotenv
 import os
+
+from database import create_database, database_exists
 from discord_bot import start_bot
 
 
@@ -18,6 +20,10 @@ def load_config():
         exit(1)
 
 def main():
+    if not database_exists():
+        create_database()
+
+
     config = load_config()
     start_bot(config)
 
