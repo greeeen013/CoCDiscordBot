@@ -122,3 +122,14 @@ class ClanCapitalHandler:
         except Exception as e:
             print(f"❌ [clan_capital] Chyba při aktualizaci embed zprávy: {str(e)}")
 
+    def _parse_time(self, raw_time: str) -> Optional[datetime]:
+        """
+        Převede čas ve formátu z Clash of Clans API (např. 20250509T070000.000Z)
+        na datetime objekt v Pythonu.
+        """
+        try:
+            return datetime.strptime(raw_time, "%Y%m%dT%H%M%S.%fZ")
+        except Exception:
+            return None
+
+
