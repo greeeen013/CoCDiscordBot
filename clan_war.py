@@ -156,7 +156,7 @@ class ClanWarHandler:
         )
 
         embed.add_field(name=f"**{clan.get('name', 'Náš klan')}**", value=our_stats, inline=True)
-        embed.add_field(name="\u200b", value="**VS**", inline=True)
+        embed.add_field(name="\u200b", value="⁣       **𝐕𝐒**", inline=True)
         embed.add_field(name=f"**{opponent.get('name', 'Protivník')}**", value=their_stats, inline=True)
 
         # Časy války
