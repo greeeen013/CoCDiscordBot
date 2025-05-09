@@ -1,6 +1,8 @@
 import discord
 from datetime import datetime
 from typing import Optional
+import json
+import os
 
 TOWN_HALL_EMOJIS = {
     17: "<:town_hall_17:1365445408096129165>",
@@ -13,6 +15,35 @@ TOWN_HALL_EMOJIS = {
     10: "<:town_hall_10:1365445393680437369>",
 }
 
+# === Sdílené ID úložiště ===
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
+
+def load_room_id(key: str):
+    if os.path.exists(ROOM_IDS_PATH):
+        try:
+            with open(ROOM_IDS_PATH, "r") as f:
+                data = json.load(f)
+                return data.get(key)
+        except Exception as e:
+            print(f"❌ [discord_rooms_ids] Chyba při čtení: {e}")
+    return None
+
+def save_room_id(key: str, message_id: Optional[int]):
+    try:
+        data = {}
+        if os.path.exists(ROOM_IDS_PATH):
+            with open(ROOM_IDS_PATH, "r") as f:
+                data = json.load(f)
+        if message_id is None:
+            data.pop(key, None)
+        else:
+            data[key] = message_id
+        with open(ROOM_IDS_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"❌ [discord_rooms_ids] Chyba při zápisu: {e}")
+
 
 class ClanWarHandler:
     def __init__(self, bot, config):
@@ -21,7 +52,7 @@ class ClanWarHandler:
         self.war_status_channel_id = 1366835944174391379
         self.war_events_channel_id = 1366835971395686554
         self.last_processed_order = 0
-        self.current_war_message_id = None
+        self.current_war_message_id = load_room_id("war_status_message")
         self._last_state = None
 
     async def process_war_data(self, war_data: dict):
@@ -35,6 +66,8 @@ class ClanWarHandler:
         # Pokud se stav změnil na warEnded, smaž obsah kanálů
         if state == 'warEnded' and self._last_state != 'warEnded':
             await self._clear_war_channels()
+            self.current_war_message_id = None
+            save_room_id("war_status_message", None)
 
         # Aktualizuj uložený stav až po kontrole
         self._last_state = state
@@ -68,7 +101,6 @@ class ClanWarHandler:
                 await events_channel.purge(limit=100)
                 print("[clan_war] Obsah kanálu s událostmi války byl smazán")
 
-            self.current_war_message_id = None
             self.last_processed_order = 0
 
         except Exception as e:
@@ -89,12 +121,12 @@ class ClanWarHandler:
                     message = await channel.fetch_message(self.current_war_message_id)
                     await message.edit(embed=embed)
                 except discord.NotFound:
+                    print("⚠️ [clan_war] Původní zpráva nenalezena, posílám novou.")
                     self.current_war_message_id = None
-                    message = await channel.send(embed=embed)
-                    self.current_war_message_id = message.id
-            else:
+            if not self.current_war_message_id:
                 message = await channel.send(embed=embed)
                 self.current_war_message_id = message.id
+                save_room_id("war_status_message", message.id)
 
         except Exception as e:
             print(f"❌ [clan_war] Chyba při aktualizaci stavu války: {str(e)}")

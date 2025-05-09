@@ -1,6 +1,37 @@
 import discord
 from datetime import datetime
 from typing import Optional
+import json
+import os
+
+# === Nastavení cesty k JSON souboru ===
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
+
+def load_room_id(key: str):
+    if os.path.exists(ROOM_IDS_PATH):
+        try:
+            with open(ROOM_IDS_PATH, "r") as f:
+                data = json.load(f)
+                return data.get(key)
+        except Exception as e:
+            print(f"❌ [discord_rooms_ids] Chyba při čtení: {e}")
+    return None
+
+def save_room_id(key: str, message_id: Optional[int]):
+    try:
+        data = {}
+        if os.path.exists(ROOM_IDS_PATH):
+            with open(ROOM_IDS_PATH, "r") as f:
+                data = json.load(f)
+        if message_id is None:
+            data.pop(key, None)
+        else:
+            data[key] = message_id
+        with open(ROOM_IDS_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"❌ [discord_rooms_ids] Chyba při zápisu: {e}")
 
 
 class ClanCapitalHandler:
@@ -8,11 +39,11 @@ class ClanCapitalHandler:
         """
         Inicializace handleru pro správu Capital Raid embed zprávy.
         """
-        self.bot = bot                              # Discord bot instance
-        self.config = config                        # Konfigurační slovník (obsahuje např. COC API klíč, GUILD_ID apod.)
-        self.capital_status_channel_id = 1370467834932756600  # ID Discord kanálu, kam se bude embed posílat
-        self.current_capital_message_id = None      # Uchovává ID aktivní embed zprávy pro možnost úpravy
-        self._last_state = None                     # Sleduje předchozí stav (např. 'ongoing', 'ended')
+        self.bot = bot                                                                  # Discord bot instance
+        self.config = config                                                            # Konfigurační slovník (obsahuje např. COC API klíč, GUILD_ID apod.)
+        self.capital_status_channel_id = 1370467834932756600                            # ID Discord kanálu, kam se bude embed posílat
+        self.current_capital_message_id = load_room_id("capital_status_message")        # načtení ID zprávy z JSON souboru
+        self._last_state = None                                                         # Sleduje předchozí stav (např. 'ongoing', 'ended')
 
     def _create_capital_embed(self, state: str, data: dict) -> discord.Embed:
         """
@@ -86,11 +117,21 @@ class ClanCapitalHandler:
 
         self._last_state = state
 
-        # Vytvoříme embed na základě aktuálního stavu a dat
-        embed = self._create_capital_embed(state, capital_data)
+        if state == "ongoing":
+            if not self.current_capital_message_id:
+                embed = self._create_capital_embed(state, capital_data)
+                await self.update_capital_message(embed)
+            else:
+                print("ℹ️ [clan_capital] Raid ongoing, zpráva už existuje – neaktualizuji.")
 
-        # Odešleme nebo upravíme zprávu s embedem
-        await self.update_capital_message(embed)
+        elif state == "ended" and self.current_capital_message_id:
+            embed = self._create_capital_embed(state, capital_data)
+            await self.update_capital_message(embed)
+            self.current_capital_message_id = None
+            save_room_id("capital_status_message", None)
+
+        else:
+            print("ℹ️ [clan_capital] Stav 'ended' ale žádná zpráva k úpravě neexistuje – neprovádím nic.")
 
     async def update_capital_message(self, embed: discord.Embed):
         """
@@ -117,6 +158,7 @@ class ClanCapitalHandler:
             # Nové odeslání zprávy
             msg = await channel.send(embed=embed)
             self.current_capital_message_id = msg.id
+            save_room_id("capital_status_message", msg.id)
             print("✅ [clan_capital] Embed byl odeslán.")
 
         except Exception as e:
@@ -131,5 +173,3 @@ class ClanCapitalHandler:
             return datetime.strptime(raw_time, "%Y%m%dT%H%M%S.%fZ")
         except Exception:
             return None
-
-
