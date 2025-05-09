@@ -79,3 +79,34 @@ async def fetch_current_war(clan_tag: str, config: dict):
         except Exception as e:
             print(f"❌ [api_handler] Neočekávaná chyba: {str(e)}")
             return None
+
+async def fetch_current_capital(clan_tag: str, config: dict) -> dict | None:
+    """
+    Volá Clash of Clans API pro získání aktuální sezóny Capital Raidu.
+    Vrací nejnovější raid ze seznamu.
+    """
+    url = f"{BASE_URL}/clans/{clan_tag.replace('#', '%23')}/capitalraidseasons"
+    headers = get_headers(config)
+
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url, headers=headers, timeout=10) as resp:
+                if resp.status == 200:
+                    print(f"✅ [api_handler] Úspěšně získána Capital Raid data pro klan {clan_tag}")
+                    data = await resp.json()
+                    return data["items"][0] if data.get("items") else None
+                elif resp.status == 403:
+                    print(f"❌ [api_handler] Přístup odepřen při získávání Capital Raid dat (403)")
+                    return None
+                elif resp.status == 404:
+                    print(f"❌ [api_handler] Capital Raid data nenalezena (404) pro klan {clan_tag}")
+                    return None
+                else:
+                    print(f"❌ [api_handler] Chyba při získávání Capital Raid dat: {resp.status} - {await resp.text()}")
+                    return None
+        except asyncio.TimeoutError:
+            print("❌ [api_handler] Timeout při získávání Capital Raid dat")
+            return None
+        except Exception as e:
+            print(f"❌ [api_handler] Neočekávaná chyba při získávání Capital Raid dat: {str(e)}")
+            return None
