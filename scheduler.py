@@ -3,28 +3,27 @@ import asyncio
 from api_handler import fetch_clan_members_list, fetch_player_data
 from database import process_clan_data, get_all_links, get_all_members
 from role_giver import update_roles
+from api_handler import fetch_current_war, fetch_current_capital
+from clan_war import ClanWarHandler
+from clan_capital import ClanCapitalHandler
+
 
 # === Stav pozastavení hodinového updatu ===
 is_hourly_paused = False
 
 # === Funkce pro hodinové tahání dat ===
 async def hourly_clan_update(config: dict, bot):
-    """
-    Periodicky stahuje seznam členů klanu každou hodinu,
-    aktualizuje databázi a zprávu s výběrem účtu.
-    """
     while True:
         if not is_hourly_paused:
             guild = bot.get_guild(config["GUILD_ID"])
             if guild is None:
                 print(f"❌ [Scheduler] Guild s ID {config['GUILD_ID']} nebyl nalezen.")
-                await asyncio.sleep(60)  # Počkej 1 minutu a zkus znovu
+                await asyncio.sleep(60)
                 continue
 
             print("🔁 [Scheduler] Spouštím aktualizaci seznamu členů klanu...")
             data = await fetch_clan_members_list(config["CLAN_TAG"], config)
             if data:
-                # clan informace
                 print(f"✅ [Scheduler] Načteno {len(data.get('items', []))} členů klanu.")
                 process_clan_data(data.get("items", []))
 
@@ -34,20 +33,22 @@ async def hourly_clan_update(config: dict, bot):
             await update_roles(guild, links, members)
             print("✅ [Scheduler] Aktualizace rolí dokončena.")
 
-            from api_handler import fetch_current_war
-            from clan_war import ClanWarHandler
-
-            # Initialize somewhere in your bot setup
+            # === WAR STATUS ===
             clan_war_handler = ClanWarHandler(bot, config)
-
-
             war_data = await fetch_current_war("#2QQ0PY9V8", config)
             if war_data:
                 await clan_war_handler.process_war_data(war_data)
+
+            # === CAPITAL STATUS ===
+            clan_capital_handler = ClanCapitalHandler(bot, config)
+            capital_data = await fetch_current_capital(config["CLAN_TAG"], config)
+            if capital_data:
+                await clan_capital_handler.process_capital_data(capital_data)
+
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(3600 / 4)  # Spí 0,25 hodiny
+        await asyncio.sleep(60*3)  # každých 15 minut
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
