@@ -92,3 +92,33 @@ class ClanCapitalHandler:
         # Odešleme nebo upravíme zprávu s embedem
         await self.update_capital_message(embed)
 
+    async def update_capital_message(self, embed: discord.Embed):
+        """
+        Vloží nebo aktualizuje embed zprávu v určeném Discord kanálu.
+        """
+        channel = self.bot.get_channel(self.capital_status_channel_id)
+        if not channel:
+            print("❌ [clan_capital] Kanál nenalezen")
+            return
+
+        try:
+            # Pokud máme uložené ID zprávy, pokusíme se ji upravit
+            if self.current_capital_message_id:
+                try:
+                    msg = await channel.fetch_message(self.current_capital_message_id)
+                    await msg.edit(embed=embed)
+                    print("✅ [clan_capital] Embed byl upraven.")
+                    return
+                except discord.NotFound:
+                    # Pokud zpráva s daným ID neexistuje (např. byla smazána), pošleme novou
+                    print("⚠️ [clan_capital] Zpráva nenalezena, posílám novou.")
+                    self.current_capital_message_id = None
+
+            # Nové odeslání zprávy
+            msg = await channel.send(embed=embed)
+            self.current_capital_message_id = msg.id
+            print("✅ [clan_capital] Embed byl odeslán.")
+
+        except Exception as e:
+            print(f"❌ [clan_capital] Chyba při aktualizaci embed zprávy: {str(e)}")
+
