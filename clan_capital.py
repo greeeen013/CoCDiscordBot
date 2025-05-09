@@ -67,3 +67,28 @@ class ClanCapitalHandler:
 
         embed.set_footer(text="Stav: ongoing")
         return embed
+
+    async def process_capital_data(self, capital_data: dict):
+        """
+        Zpracuje předaná data z Clash of Clans API a aktualizuje embed.
+        Pokud došlo ke změně stavu raidu, zapíše do konzole.
+        """
+        if not capital_data:
+            print("❌ [clan_capital] Žádná data o raidu ke zpracování")
+            return
+
+        # Získáme aktuální stav (např. 'ongoing' nebo 'ended')
+        state = capital_data.get('state', 'unknown')
+
+        # Pokud se stav změnil od minula, informujeme v konzoli
+        if state != self._last_state:
+            print(f"ℹ️ [clan_capital] Stav se změnil na: {state}")
+
+        self._last_state = state
+
+        # Vytvoříme embed na základě aktuálního stavu a dat
+        embed = self._create_capital_embed(state, capital_data)
+
+        # Odešleme nebo upravíme zprávu s embedem
+        await self.update_capital_message(embed)
+
