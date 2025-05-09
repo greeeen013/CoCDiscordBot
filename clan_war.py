@@ -174,7 +174,7 @@ class ClanWarHandler:
             if time:
                 embed.add_field(
                     name=name,
-                    value=f"<t:{int(time.timestamp())}:F>\n(`<t:{int(time.timestamp())}:R>`)",
+                    value=f"<t:{int(time.timestamp())}:f>\n<t:{int(time.timestamp())}:R>",
                     inline=True
                 )
 
