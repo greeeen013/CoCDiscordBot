@@ -80,8 +80,8 @@ class ClanWarHandler:
             # Aktualizace stavu války
             await self.update_war_status(war_data)
 
-            # Zpracování událostí (útoků) jen pokud válka probíhá
-            if state == 'inWar':
+            # Zpracování událostí (útoků)
+            if war_data.get('state') in ('inWar', 'preparation'):
                 await self.process_war_events(war_data)
 
         except Exception as e:
