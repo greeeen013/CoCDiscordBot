@@ -6,6 +6,8 @@ from role_giver import update_roles
 from api_handler import fetch_current_war, fetch_current_capital
 from clan_war import ClanWarHandler
 from clan_capital import ClanCapitalHandler
+from game_events import GameEventsHandler
+
 
 
 # === Stav pozastavení hodinového updatu ===
@@ -44,6 +46,11 @@ async def hourly_clan_update(config: dict, bot):
             capital_data = await fetch_current_capital(config["CLAN_TAG"], config)
             if capital_data:
                 await clan_capital_handler.process_capital_data(capital_data)
+
+            # === GAME EVENTS ===
+            game_events_handler = GameEventsHandler(bot, config)
+            await game_events_handler.process_game_events()
+
 
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
