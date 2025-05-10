@@ -1,4 +1,5 @@
 import discord
+from discord.utils import escape_markdown
 from datetime import datetime
 from typing import Optional
 import json
@@ -65,7 +66,8 @@ class ClanWarHandler:
 
         # Pokud se stav změnil na warEnded, smaž obsah kanálů
         if state == 'warEnded' and self._last_state != 'warEnded':
-            await self._clear_war_channels()
+            # pokud chceme smazat mistnost tak odkomentujeme funkci
+            #await self._clear_war_channels()
             self.current_war_message_id = None
             save_room_id("war_status_message", None)
 
@@ -178,17 +180,25 @@ class ClanWarHandler:
                     inline=True
                 )
 
-        # Členové (pouze pokud válka probíhá)
-        if war_data.get('state') == 'inWar':
+        # Členové
+        if war_data.get('state') in ('inWar', 'preparation'):
             our_members = "\n".join(
-                f"{TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), '')} {m.get('name', 'Unknown')} "
-                f"({len(m.get('attacks', []))}/{war_data.get('attacksPerMember', 2)})"
+                "{emoji} {name} ({attacks}/{max_attacks})".format(
+                    emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
+                    name=m.get('name', 'Unknown').replace('_', r'\_'),
+                    attacks=len(m.get('attacks', [])),
+                    max_attacks=war_data.get('attacksPerMember', 2)
+                )
                 for m in sorted(clan.get('members', []), key=lambda x: x.get('mapPosition', 0))
             )
 
             their_members = "\n".join(
-                f"{TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), '')} {m.get('name', 'Unknown')} "
-                f"({len(m.get('attacks', []))}/{war_data.get('attacksPerMember', 2)})"
+                "{emoji} {name} ({attacks}/{max_attacks})".format(
+                    emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
+                    name=m.get('name', 'Unknown').replace('_', r'\_'),
+                    attacks=len(m.get('attacks', [])),
+                    max_attacks=war_data.get('attacksPerMember', 2)
+                )
                 for m in sorted(opponent.get('members', []), key=lambda x: x.get('mapPosition', 0))
             )
 
@@ -302,7 +312,7 @@ class ClanWarHandler:
         links = get_all_links()
         for discord_id, (tag, _) in links.items():
             if tag == coc_tag:
-                member = self.bot.get_guild(self.config['DISCORD_GUILD_ID']).get_member(discord_id)
+                member = self.bot.get_guild(self.config['GUILD_ID']).get_member(discord_id)
                 if member:
                     print(f"[clan_war] Nalezen propojený uživatel: {member.display_name} ({member.id})")
                     return member.mention
