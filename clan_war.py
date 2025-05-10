@@ -51,7 +51,7 @@ class ClanWarHandler:
         self.config = config
         self.war_status_channel_id = 1366835944174391379
         self.war_events_channel_id = 1366835971395686554
-        self.last_processed_order = 0
+        self.last_processed_order = load_room_id("last_war_event_order") or 0
         self.current_war_message_id = load_room_id("war_status_message")
         self._last_state = None
 
@@ -220,7 +220,7 @@ class ClanWarHandler:
         for attack in new_attacks:
             await self._send_attack_embed(channel, attack, war_data)
             self.last_processed_order = max(self.last_processed_order, attack.get('order', 0))
-
+            save_room_id("last_war_event_order", self.last_processed_order)
     async def _send_attack_embed(self, channel, attack: dict, war_data: dict):
         """Vytvoří embed pro jeden útok"""
         attacker = self._find_member_by_tag(attack.get('attackerTag'), war_data)
@@ -232,7 +232,7 @@ class ClanWarHandler:
         is_our_attack = any(m.get('tag') == attacker.get('tag') for m in war_data.get('clan', {}).get('members', []))
         discord_mention = await self._get_discord_mention(attack.get('attackerTag'))
 
-        # Double-check pro Discord ping
+        # Debug ping
         if discord_mention:
             print(f"✅ [clan_war] Nalezen Discord uživatel pro tag {attack.get('attackerTag')}: {discord_mention}")
 
@@ -253,10 +253,16 @@ class ClanWarHandler:
             action = "**OBRANA** 🛡️"
             arrow = "⬅️"
 
+        # Pořadí hráčů (pozice)
+        left_pos = left_side.get("mapPosition")
+        right_pos = right_side.get("mapPosition")
+        left_prefix = f"#{left_pos + 1} | " if left_pos is not None else ""
+        right_prefix = f"#{right_pos + 1} | " if right_pos is not None else ""
+
         # Levá strana (náš hráč)
         left_field = (
             f"{discord_mention or ''}\n"
-            f"{TOWN_HALL_EMOJIS.get(left_side.get('townhallLevel', 10), '')} {left_side.get('name', 'Unknown')}"
+            f"{left_prefix}{TOWN_HALL_EMOJIS.get(left_side.get('townhallLevel', 10), '')} {left_side.get('name', 'Unknown')}"
         )
 
         # Prostřední akce
@@ -267,14 +273,15 @@ class ClanWarHandler:
         )
 
         # Pravá strana (protivník)
-        right_field = f"{TOWN_HALL_EMOJIS.get(right_side.get('townhallLevel', 10), '')} {right_side.get('name', 'Unknown')}"
+        right_field = (
+            f"{right_prefix}{TOWN_HALL_EMOJIS.get(right_side.get('townhallLevel', 10), '')} {right_side.get('name', 'Unknown')}"
+        )
 
         embed.add_field(name="\u200b", value=left_field, inline=True)
         embed.add_field(name="\u200b", value=middle_field, inline=True)
         embed.add_field(name="\u200b", value=right_field, inline=True)
 
         embed.set_footer(text=f"Útok #{attack.get('order', 0)} | Trvání: {attack.get('duration', 0)}s")
-
         await channel.send(embed=embed)
 
     def _find_member_by_tag(self, tag: str, war_data: dict) -> Optional[dict]:
