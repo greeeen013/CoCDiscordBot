@@ -19,3 +19,29 @@ EVENT_EMOJIS = {
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
 
+def load_room_id(key: str):
+    if os.path.exists(ROOM_IDS_PATH):
+        try:
+            with open(ROOM_IDS_PATH, "r") as f:
+                data = json.load(f)
+                return data.get(key)
+        except Exception as e:
+            print(f"❌ [discord_rooms_ids] Chyba při čtení: {e}")
+    return None
+
+def save_room_id(key: str, message_id: Optional[int]):
+    try:
+        data = {}
+        if os.path.exists(ROOM_IDS_PATH):
+            with open(ROOM_IDS_PATH, "r") as f:
+                data = json.load(f)
+        if message_id is None:
+            data.pop(key, None)
+        else:
+            data[key] = message_id
+        with open(ROOM_IDS_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"❌ [discord_rooms_ids] Chyba při zápisu: {e}")
+
+
