@@ -134,7 +134,7 @@ class ClanWarHandler:
             print(f"❌ [clan_war] Chyba při aktualizaci stavu války: {str(e)}")
 
     def _create_war_status_embed(self, war_data: dict) -> discord.Embed:
-        """Vytvoří embed se stavem války"""
+        """Vytvoří embed se stavem války (včetně členů, limitováno na 25 fieldů)"""
         clan = war_data.get('clan', {})
         opponent = war_data.get('opponent', {})
         state = war_data.get('state', 'unknown').capitalize()
@@ -144,13 +144,12 @@ class ClanWarHandler:
             color=discord.Color.blue() if state == "Inwar" else discord.Color.gold()
         )
 
-        # Horní část - základní informace
+        # Základní statistiky
         our_stats = (
             f"**{clan.get('stars', 0)}⭐**\n"
             f"Útoky: {clan.get('attacks', 0)}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', 2)}\n"
             f"{clan.get('destructionPercentage', 0)}%"
         )
-
         their_stats = (
             f"**{opponent.get('stars', 0)}⭐**\n"
             f"Útoky: {opponent.get('attacks', 0)}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', 2)}\n"
@@ -161,7 +160,7 @@ class ClanWarHandler:
         embed.add_field(name="\u200b", value="⁣       **𝐕𝐒**", inline=True)
         embed.add_field(name=f"**{opponent.get('name', 'Protivník')}**", value=their_stats, inline=True)
 
-        # Časy války
+        # Časy
         prep_time = self._parse_coc_time(war_data.get('preparationStartTime', ''))
         start_time = self._parse_coc_time(war_data.get('startTime', ''))
         end_time = self._parse_coc_time(war_data.get('endTime', ''))
@@ -180,31 +179,44 @@ class ClanWarHandler:
                     inline=True
                 )
 
-        # Členové
+        # Členové války – pouze pokud je válka aktivní nebo v přípravě
         if war_data.get('state') in ('inWar', 'preparation'):
-            our_members = "\n".join(
-                "{emoji} {name} ({attacks}/{max_attacks})".format(
-                    emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
-                    name=m.get('name', 'Unknown').replace('_', r'\_'),
-                    attacks=len(m.get('attacks', [])),
-                    max_attacks=war_data.get('attacksPerMember', 2)
-                )
-                for m in sorted(clan.get('members', []), key=lambda x: x.get('mapPosition', 0))
-            )
+            def format_members(members):
+                return [
+                    "{emoji} {name} ({attacks}/{max_attacks})".format(
+                        emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
+                        name=m.get('name', 'Unknown').replace('_', r'\_'),
+                        attacks=len(m.get('attacks', [])),
+                        max_attacks=war_data.get('attacksPerMember', 2)
+                    )
+                    for m in sorted(members, key=lambda x: x.get('mapPosition', 0))
+                ]
 
-            their_members = "\n".join(
-                "{emoji} {name} ({attacks}/{max_attacks})".format(
-                    emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
-                    name=m.get('name', 'Unknown').replace('_', r'\_'),
-                    attacks=len(m.get('attacks', [])),
-                    max_attacks=war_data.get('attacksPerMember', 2)
-                )
-                for m in sorted(opponent.get('members', []), key=lambda x: x.get('mapPosition', 0))
-            )
+            our_lines = format_members(clan.get('members', []))
+            their_lines = format_members(opponent.get('members', []))
 
-            embed.add_field(name="**Naši hráči**", value=our_members[:1024] or "Žádní", inline=True)
-            embed.add_field(name="**Jejich hráči**", value=their_members[:1024] or "Žádní", inline=True)
+            # Rozdělení na dvě části
+            split_index = 15
+            our_part1 = "\n".join(our_lines[:split_index])[:1024] or "Žádní"
+            their_part1 = "\n".join(their_lines[:split_index])[:1024] or "Žádní"
+            our_part2 = "\n".join(our_lines[split_index:])[:1024] or "—"
+            their_part2 = "\n".join(their_lines[split_index:])[:1024] or "—"
 
+            embed.add_field(name="**Naši hráči**", value=our_part1, inline=True)
+            embed.add_field(name=" ", value=" ", inline=True)
+            embed.add_field(name="**Jejich hráči**", value=their_part1, inline=True)
+
+            # Pokud máme pokračování, přidáme optický oddělovač a zbytek
+            if len(our_lines) > split_index or len(their_lines) > split_index:
+                embed.add_field(name=" ", value=" ", inline=False)
+                #embed.add_field(name=" ", value=" ", inline=True)
+
+                embed.add_field(name=" ", value=our_part2, inline=True)
+                embed.add_field(name=" ", value=" ", inline=True)
+                embed.add_field(name=" ", value=their_part2, inline=True)
+        for i, f in enumerate(embed.fields):
+            print(f"[DEBUG] Field {i + 1}: name='{f.name[:30]}...' len={len(f.value)} inline={f.inline}")
+        print(f"[DEBUG] Celkem embed fieldů: {len(embed.fields)}")
         embed.set_footer(text=f"Stav války: {state}")
         return embed
 
