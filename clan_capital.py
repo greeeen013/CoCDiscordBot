@@ -118,11 +118,8 @@ class ClanCapitalHandler:
         self._last_state = state
 
         if state == "ongoing":
-            if not self.current_capital_message_id:
-                embed = self._create_capital_embed(state, capital_data)
-                await self.update_capital_message(embed)
-            else:
-                print("ℹ️ [clan_capital] Raid ongoing, zpráva už existuje – neaktualizuji.")
+            embed = self._create_capital_embed(state, capital_data)
+            await self.update_capital_message(embed)
 
         elif state == "ended" and self.current_capital_message_id:
             embed = self._create_capital_embed(state, capital_data)
