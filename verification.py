@@ -86,7 +86,7 @@ async def end_verification(user, verification_channel):
     """
 
     await asyncio.sleep(5)
-    await verification_channel.send(f"🗑️ místnost pro {user} bude automaticky smazána za 5 sekundy...")
+    await verification_channel.send(f"🗑️ místnost pro {user} bude automaticky smazána za 5 sekund...")
     await asyncio.sleep(5)
     await verification_channel.delete()
 
@@ -119,13 +119,14 @@ async def succesful_verification(bot, user, verification_channel, selected_item,
         print(f"❌ [verification] Chyba při zápisu do databáze: {e}")
         await verification_channel.send(f"❌ chyba při zápisu do databáze někdo se na to brzo podívá.")
 
-    resume_hourly_update()  # Obnoví hodinový update
+
     await end_verification(user, verification_channel)  # Zavolá funkci pro ukončení ověření
     print(f"✅ [verification] posíám welcome_on_server_message pro {user}...")
     await welcome_on_server_message(bot, user)  # Pošle uvítací zprávu do kanálu
 
     await update_role_when_new_member(bot, user)
     print(f"✅ [verification] Hráč {user} úspěšně ověřen - {selected_item} nasazen. ✅")
+    resume_hourly_update()  # Obnoví hodinový update
 
 async def welcome_on_server_message(bot, user):
     """
@@ -246,7 +247,9 @@ async def process_verification(bot, player_data, user, verification_channel, sel
                 "• **4.** Bot každých 5 minuty kontroluje změny\n"
                 "• **5.** Jakmile zjistíme změnu, ověření proběhne automaticky a bot tě přivítá ✅\n"
                 "• **6.** Takže nemusíš se vracet zpátky a něco potvrzovat ✅\n"
-                "• **7.** Pokud nestihneš do **20 minut**, ověření expiruje ❌"
+                "• **7.** Pokud nestihneš do **20 minut**, ověření expiruje ❌\n"
+                "• ps. nezapomeň si vybavení vrátit po verifikaci 😅\n"
+
             ),
             inline=False
         )
