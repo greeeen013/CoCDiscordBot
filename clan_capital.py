@@ -4,6 +4,15 @@ from typing import Optional
 import json
 import os
 
+EVENT_EMOJIS = {
+    "Capital Gold": "<:capital_gold:1370839359896551677>",
+    "Clan Capital": "<:clan_capital:1370710098158026792>",
+    "Capital District": "<:capital_district:1370841273128456392>",
+    "Capital Destroyed District": "<:capital_destroyed_district:1370843785688518706>",
+    "Season End": "<:free_battlepass:1370713363188813865>",
+    "CWL": "<:clan_war_league:1370712275614302309>",
+}
+
 # === Nastavení cesty k JSON souboru ===
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
@@ -64,34 +73,45 @@ class ClanCapitalHandler:
         end = self._parse_time(data.get("endTime"))          # konec jako datetime
         start_ts = int(start.timestamp()) if start else 0    # timestamp pro Discord tag
         end_ts = int(end.timestamp()) if end else 0
-
+        emoji = EVENT_EMOJIS.get("Capital District", "🏰")
         embed = discord.Embed(
-            title="🏰 Capital Raid: Probíhá",
+            title=f"{emoji} Capital Raid: Probíhá",
             color=discord.Color.purple()
         )
 
         # Začátek a konec s formátem Discordu (zobrazí jak konkrétní datum, tak relativní čas)
-        embed.add_field(name="Začátek", value=f"<t:{start_ts}>\n<t:{start_ts}:R>", inline=True)
-        embed.add_field(name="Konec", value=f"<t:{end_ts}>\n<t:{end_ts}:R>", inline=True)
-
+        embed.add_field(
+            name="🏁 Začátek",
+            value=f"<t:{start_ts}>\n<t:{start_ts}:R>",
+            inline=True
+        )
+        embed.add_field(
+            name="📍 Konec",
+            value=f"<t:{end_ts}>\n<t:{end_ts}:R>",
+            inline=True
+        )
+        emoji = EVENT_EMOJIS.get("Capital Gold", "💰")
         # Statistiky s centrovaným formátem a monospaced fontem
         embed.add_field(
-            name="💰 Loot",
+            name=f"{emoji} Loot",
             value=f"`{data.get('capitalTotalLoot', 0):^10,}`",
             inline=True
         )
+        emoji = EVENT_EMOJIS.get("Capital Destroyed District", "⚔️️")
         embed.add_field(
-            name="⚔️ Raids Completed",
+            name=f"️{emoji} Raidů dokončeno",
             value=f"`{data.get('raidsCompleted', 0):^10}`",
             inline=True
         )
+        emoji = EVENT_EMOJIS.get("Clan Capital", "⚔️️")
         embed.add_field(
-            name="🎯 Attacks",
+            name=f"{emoji} Attacks",
             value=f"`{data.get('totalAttacks', 0):^10}`",
             inline=True
         )
+        emoji = EVENT_EMOJIS.get("Capital District", "🏙️")
         embed.add_field(
-            name="🏙️ Districts Destroyed",
+            name=f"{emoji} Zničeno Disctrictů",
             value=f"`{data.get('enemyDistrictsDestroyed', 0):^10}`",
             inline=True
         )
