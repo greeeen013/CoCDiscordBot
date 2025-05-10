@@ -1,7 +1,7 @@
 import aiohttp
 import asyncio
-import time
-import os
+import requests
+from bs4 import BeautifulSoup
 
 # === Inicializace hlaviček a základní URL ===
 def get_headers(config: dict) -> dict:
@@ -110,3 +110,43 @@ async def fetch_current_capital(clan_tag: str, config: dict) -> dict | None:
         except Exception as e:
             print(f"❌ [api_handler] Neočekávaná chyba při získávání Capital Raid dat: {str(e)}")
             return None
+
+def fetch_events_from_clash_ninja():
+    """
+    Načte nadcházející události z clash.ninja a vrátí je jako seznam slovníků.
+    """
+    url = "https://www.clash.ninja/guides/when-are-the-next-ingame-events"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        events_divs = soup.find_all("div", class_="event-holder")
+
+        events = []
+        for div in events_divs:
+            title_raw = div.find("h3")
+            if not title_raw:
+                continue
+
+            title = title_raw.get_text(strip=True).replace("(Active Until)", "").strip()
+            is_active = "(Active Until)" in title_raw.text
+
+            ts = int(div.get("data-ed", 0)) // 1000  # safe fallback
+
+            timer_div = div.find("div", class_="event-timer")
+            remaining = timer_div.get_text(strip=True) if timer_div else ""
+
+            if ts > 0:
+                events.append({
+                    "title": title,
+                    "timestamp": ts,
+                    "remaining": remaining,
+                    "active": is_active
+                })
+
+        return events
+
+    except Exception as e:
+        print(f"❌ [clash_events_api] Chyba při načítání: {e}")
+        return []
