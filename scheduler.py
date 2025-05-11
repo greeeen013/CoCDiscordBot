@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 
 from api_handler import fetch_clan_members_list, fetch_player_data
 from database import process_clan_data, get_all_links, get_all_members
@@ -17,18 +18,23 @@ is_hourly_paused = False
 async def hourly_clan_update(config: dict, bot):
     while True:
         if not is_hourly_paused:
+            print(f"🕒 [Scheduler] spouštím hourly_clan_update Aktuální datum a čas: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+
+            # === Načtení clanu ===
             guild = bot.get_guild(config["GUILD_ID"])
             if guild is None:
                 print(f"❌ [Scheduler] Guild s ID {config['GUILD_ID']} nebyl nalezen.")
                 await asyncio.sleep(60)
                 continue
 
+            # === Načtení seznamu členů klanu ===
             print("🔁 [Scheduler] Spouštím aktualizaci seznamu členů klanu...")
             data = await fetch_clan_members_list(config["CLAN_TAG"], config)
             if data:
                 print(f"✅ [Scheduler] Načteno {len(data.get('items', []))} členů klanu.")
                 process_clan_data(data.get("items", []))
 
+            # === Aktualizace rolí ===
             print("🔄 [Scheduler] Spouštím automatickou aktualizaci rolí...")
             links = get_all_links()
             members = get_all_members()
