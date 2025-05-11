@@ -1,8 +1,10 @@
+import asyncio
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import discord
+from discord.ui import View, Button
 
 # === Cesta k souboru databáze ===
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coc_data_info.sqlite3")
@@ -55,7 +57,8 @@ def create_database():
                 CREATE TABLE IF NOT EXISTS clan_warnings (
                     coc_tag TEXT,
                     date_time TEXT,
-                    reason TEXT
+                    reason TEXT,
+                    notified_at TEXT
                 )
             ''')
             conn.commit()
@@ -265,6 +268,9 @@ def get_all_members():
 # === Funkce pro přidání varování ===
 # === Přidání varování ===
 def add_warning(coc_tag: str, date_time: str = None, reason: str = "Bez udaného důvodu", bot: discord.Client = None):
+    if not coc_tag.startswith("#"):
+        coc_tag = f"#{coc_tag}"
+
     if date_time:
         try:
             datetime.strptime(date_time, "%d/%m/%Y %H:%M")
@@ -274,22 +280,13 @@ def add_warning(coc_tag: str, date_time: str = None, reason: str = "Bez udaného
     else:
         date_time = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("""
-                INSERT INTO clan_warnings (coc_tag, date_time, reason) VALUES (?, ?, ?)
-            """, (coc_tag, date_time, reason))
-            conn.commit()
-            print(f"⚠️ [warning] Varování přidáno pro {coc_tag} – {reason} ({date_time})")
-
-        # Pokud máme bot objekt, pošleme zprávu
-        if bot:
-            import asyncio
-            asyncio.create_task(notify_single_warning(bot, coc_tag, date_time, reason))
-
-    except Exception as e:
-        print(f"❌ [database] Chyba při ukládání varování: {e}")
+    if bot:
+        import asyncio
+        asyncio.create_task(notify_single_warning(bot, coc_tag, date_time, reason))
+        notify_warnings_exceed(bot)
+        print(f"📝 [warning] Návrh varování pro {coc_tag} připraven a odeslán k potvrzení.")
+    else:
+        print(f"⚠️ [warning] Chybí bot pro potvrzení varování, nic nebylo odesláno.")
 
 # === Funkce pro výpis varování ===
 def list_warnings():
@@ -346,20 +343,120 @@ async def cleanup_old_warnings():
         print(f"❌ [cleanup] Chyba při čištění varování: {e}")
 
 # === Poslání varování jako zprávu na Discord ===
-async def send_warning_notification(bot: discord.Client, tag: str, name: str, warnings: list[tuple[str, str]]):
-    try:
-        channel = bot.get_channel(1371105995270393867)
-        if channel:
-            msg = (
-                f"<@317724566426222592>\n"
-                f"**{tag}**\n"
-                f"@{name}\n"
-                + "\n".join([f"{i+1}. {dt} – {reason}" for i, (dt, reason) in enumerate(warnings)])
+# === Poslání varování jako zprávu na Discord ===
+class WarningReviewView(View):
+    def __init__(self, coc_tag: str, date_time: str, reason: str):
+        super().__init__(timeout=None)
+        self.coc_tag = coc_tag
+        self.date_time = date_time
+        self.reason = reason
+
+    @discord.ui.button(label="✅ Potvrdit", style=discord.ButtonStyle.green)
+    async def confirm(self, interaction: discord.Interaction, button: Button):
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                c = conn.cursor()
+                c.execute("""
+                    INSERT INTO clan_warnings (coc_tag, date_time, reason, notified_at)
+                    VALUES (?, ?, ?, NULL)
+                """, (self.coc_tag, self.date_time, self.reason))
+                conn.commit()
+
+            # 1. nejdřív odpověz
+            msg = await interaction.response.send_message(
+                f"✅ Varování pro {self.coc_tag} bylo uloženo.",
+                ephemeral=False
             )
-            await channel.send(msg)
-            print(f"📣 [notify] Zpráva o hráči {tag} odeslána na Discord.")
+
+            # 2. pak smaž původní zprávu
+            await interaction.message.delete()
+
+            # 3. počkej a smaž potvrzovací zprávu
+            sent_msg = await interaction.original_response()
+            print(f"✅ [database] [review] {interaction.user.name} ({interaction.user.id}) potvrdil varování: {self.coc_tag} – {self.reason}")
+            await asyncio.sleep(20)
+            await sent_msg.delete()
+
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Chyba při ukládání varování: {e}", ephemeral=True
+            )
+            print(f"❌ [review] Chyba při potvrzení varování {self.coc_tag}: {e}")
+
+    @discord.ui.button(label="❌ Zrušit", style=discord.ButtonStyle.red)
+    async def reject(self, interaction: discord.Interaction, button: Button):
+        msg = await interaction.response.send_message(
+            f"❌ Varování pro {self.coc_tag} bylo zamítnuto.",
+            ephemeral=False
+        )
+        await interaction.message.delete()
+        sent_msg = await interaction.original_response()
+        print(f"❌ [database] [review] {interaction.user.name} ({interaction.user.id}) zamítl varování: {self.coc_tag} – {self.reason}")
+        await asyncio.sleep(20)
+        await sent_msg.delete()
+
+# === Upozornění při 3+ varováních a oznámení na Discord ===
+async def notify_warnings_exceed(bot: discord.Client):
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("SELECT coc_tag, COUNT(*) FROM clan_warnings GROUP BY coc_tag HAVING COUNT(*) >= 3")
+            tags = c.fetchall()
+
+            for tag, count in tags:
+                # Zjisti poslední notified_at
+                c.execute("SELECT MAX(notified_at) FROM clan_warnings WHERE coc_tag = ?", (tag,))
+                last_notified = c.fetchone()[0]
+                recent_warnings = []
+
+                if last_notified:
+                    try:
+                        last_dt = datetime.strptime(last_notified, "%d/%m/%Y %H:%M")
+                        c.execute("SELECT date_time, reason FROM clan_warnings WHERE coc_tag = ?", (tag,))
+                        all = c.fetchall()
+                        recent_warnings = [
+                            (dt, reason) for (dt, reason) in all
+                            if datetime.strptime(dt, "%d/%m/%Y %H:%M") > last_dt
+                        ]
+                        if not recent_warnings:
+                            continue  # nic nového
+                    except Exception as e:
+                        print(f"⚠️ [notify] Chyba při porovnávání času pro {tag}: {e}")
+                        continue
+                else:
+                    # pokud žádný notified_at ještě nikdy nebyl
+                    c.execute("SELECT date_time, reason FROM clan_warnings WHERE coc_tag = ?", (tag,))
+                    recent_warnings = c.fetchall()
+
+                # načti jméno
+                c.execute("SELECT coc_name, discord_name FROM coc_discord_links WHERE coc_tag = ?", (tag,))
+                result = c.fetchone()
+                if result:
+                    coc_name = result[0]
+                    discord_mention = f"<@{result[1]}>" if result[1] else coc_name
+                else:
+                    c.execute("SELECT name FROM clan_members WHERE tag = ?", (tag,))
+                    name_row = c.fetchone()
+                    coc_name = name_row[0] if name_row else "Neznámý hráč"
+                    discord_mention = f"@{coc_name}"
+
+                channel = bot.get_channel(1371105995270393867)
+                if channel:
+                    msg = (
+                            f"<@317724566426222592>\n"
+                            f"**{tag}**\n"
+                            f"{discord_mention}\n"
+                            + "\n".join([f"{i + 1}. {dt} – {reason}" for i, (dt, reason) in enumerate(recent_warnings)])
+                    )
+                    await channel.send(msg)
+                    print(f"📣 [notify] Nová notifikace pro {tag} – {len(recent_warnings)} nových varování.")
+
+                    now = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    c.execute("UPDATE clan_warnings SET notified_at = ? WHERE coc_tag = ?", (now, tag))
+                    conn.commit()
+
     except Exception as e:
-        print(f"❌ [notify] Chyba při odesílání zprávy na Discord: {e}")
+        print(f"❌ [notify] Chyba při notifikaci o vícenásobných varováních: {e}")
 
 # === Rychlé upozornění na nové varování ===
 async def notify_single_warning(bot: discord.Client, coc_tag: str, date_time: str, reason: str):
@@ -372,42 +469,9 @@ async def notify_single_warning(bot: discord.Client, coc_tag: str, date_time: st
 
         channel = bot.get_channel(1371105995270393867)
         if channel:
-            msg = f"{coc_tag}\n{name}\n{date_time} – {reason}"
-            await channel.send(msg)
-            await notify_warnings_exceed(bot)
-            print(f"📣 [notify] Nové varování nahlášeno pro {coc_tag}.")
+            msg = f"{coc_tag}\n@{name}\n{date_time}\n{reason}"
+            view = WarningReviewView(coc_tag, date_time, reason)
+            await channel.send(msg, view=view)
+            print(f"📣 [notify] Návrh na varování odeslán pro {coc_tag}.")
     except Exception as e:
         print(f"❌ [notify] Chyba při posílání jednoho varování: {e}")
-# === Upozornění při 3+ varováních a oznámení na Discord ===
-# === Upozornění při 3+ varováních ===
-async def notify_warnings_exceed(bot: discord.Client):
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("SELECT coc_tag, COUNT(*) FROM clan_warnings GROUP BY coc_tag HAVING COUNT(*) >= 3")
-            tags = c.fetchall()
-
-            for tag, count in tags:
-                # Získání údajů o hráči
-                c.execute("SELECT coc_name, discord_name FROM coc_discord_links WHERE coc_tag = ?", (tag,))
-                result = c.fetchone()
-                coc_name = result[0] if result else "Neznámý hráč"
-                discord_mention = f"<@{result[1]}>" if result and result[1] else coc_name
-
-                # Načti všechna varování hráče
-                c.execute("SELECT date_time, reason FROM clan_warnings WHERE coc_tag = ?", (tag,))
-                warnings = c.fetchall()
-
-                # Najdi cílový kanál
-                channel = bot.get_channel(1371105995270393867)
-                if channel:
-                    msg = (
-                        f"<@317724566426222592>\n"
-                        f"**{tag}**\n"
-                        f"{discord_mention}\n"
-                        + "\n".join([f"{i + 1}. {dt} – {reason}" for i, (dt, reason) in enumerate(warnings)])
-                    )
-                    await channel.send(msg)
-                    print(f"📣 [notify] Odeslána notifikace pro hráče {tag} se {count} varováními.")
-    except Exception as e:
-        print(f"❌ [notify] Chyba při notifikaci o vícenásobných varováních: {e}")
