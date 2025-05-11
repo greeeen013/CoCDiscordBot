@@ -3,6 +3,9 @@ from discord import app_commands
 from discord.utils import get
 from datetime import datetime, timedelta
 
+from database import remove_warning, list_warnings, add_warning
+
+
 async def setup_mod_commands(bot):
     @bot.tree.command(name="clear", description="Vyčistí kanál nebo zadaný počet zpráv", guild=bot.guild_object)
     @app_commands.describe(pocet="Kolik zpráv smazat (nebo prázdné = kompletní vymazání)")
@@ -141,3 +144,38 @@ async def setup_mod_commands(bot):
             await interaction.response.send_message("✅ Slowmode vypnut.")
         else:
             await interaction.response.send_message(f"✅ Slowmode nastaven na {sekundy} sekund.")
+
+    @bot.tree.command(name="add_warning", description="Přidá varování hráči podle CoC tagu", guild=bot.guild_object)
+    @app_commands.describe(
+        coc_tag="Clash of Clans tag hráče",
+        date_time="Datum a čas (DD/MM/YYYY HH:MM)",
+        reason="Důvod varování"
+    )
+    async def add_warning_cmd(interaction: discord.Interaction, coc_tag: str, date_time: str = None,
+                              reason: str = None):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            return
+        add_warning(coc_tag, date_time, reason)
+        await interaction.response.send_message(f"✅ Varování přidáno pro {coc_tag}.", ephemeral=True)
+
+    @bot.tree.command(name="list_warnings", description="Vypíše všechna varování v konzoli", guild=bot.guild_object)
+    async def list_warnings_cmd(interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            return
+        list_warnings()
+        await interaction.response.send_message("📋 Varování byla vypsána do konzole.", ephemeral=True)
+
+    @bot.tree.command(name="remove_warning", description="Odstraní konkrétní varování", guild=bot.guild_object)
+    @app_commands.describe(
+        coc_tag="Tag hráče",
+        date_time="Datum a čas varování (DD/MM/YYYY HH:MM)",
+        reason="Přesný důvod varování"
+    )
+    async def remove_warning_cmd(interaction: discord.Interaction, coc_tag: str, date_time: str, reason: str):
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            return
+        remove_warning(coc_tag, date_time, reason)
+        await interaction.response.send_message("🗑️ Varování odstraněno (pokud existovalo).", ephemeral=True)

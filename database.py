@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime
 
 # === Cesta k souboru databáze ===
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coc_data_info.sqlite3")
@@ -21,7 +22,7 @@ def database_exists() -> bool:
 
 # === Funkce pro vytvoření nové databáze ===
 def create_database():
-    """Vytvoří novou SQLite databázi s tabulkami clan_members a coc_links."""
+    """Vytvoří novou SQLite databázi s tabulkami clan_members, coc_links a clan_warnings."""
     try:
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
@@ -48,8 +49,14 @@ def create_database():
                     coc_name TEXT
                 )
             ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS clan_warnings (
+                    coc_tag TEXT,
+                    date_time TEXT,
+                    reason TEXT
+                )
+            ''')
             conn.commit()
-            conn.close()
             print("✅ [database] Databáze a tabulky vytvořeny.")
     except Exception as e:
         print(f"❌ [database] Chyba při vytváření databáze: {e}")
@@ -252,3 +259,61 @@ def get_all_members():
         })
 
     return members
+
+# === Funkce pro přidání varování ===
+def add_warning(coc_tag: str, date_time: str = None, reason: str = "Bez udaného důvodu"):
+    if date_time:
+        try:
+            # Validace formátu
+            datetime.strptime(date_time, "%d/%m/%Y %H:%M")
+        except ValueError:
+            print(f"⚠️ [warning] Neplatný formát času: {date_time} – očekáváno ve formátu DD/MM/YYYY HH:MM. Vygenerován automaticky.")
+            date_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+    else:
+        date_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO clan_warnings (coc_tag, date_time, reason) VALUES (?, ?, ?)
+            """, (coc_tag, date_time, reason))
+            conn.commit()
+            print(f"⚠️ [warning] Varování přidáno pro {coc_tag} – {reason} ({date_time})")
+    except Exception as e:
+        print(f"❌ [database] Chyba při ukládání varování: {e}")
+
+# === Funkce pro výpis varování ===
+def list_warnings():
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("SELECT coc_tag, date_time, reason FROM clan_warnings")
+            rows = c.fetchall()
+
+            if not rows:
+                print("😊 [warnings] Nenalezeno žádné varování.")
+                return
+
+            print("\n=== 🔶 Seznam varování ===")
+            for i, (tag, dt, reason) in enumerate(rows, 1):
+                print(f"{i}. {tag} – {dt} – Důvod: {reason}")
+
+    except Exception as e:
+        print(f"❌ [database] Chyba při čtení varování: {e}")
+
+# === Funkce pro odstranění varování ===
+def remove_warning(coc_tag: str, date_time: str, reason: str):
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("""
+                DELETE FROM clan_warnings WHERE coc_tag = ? AND date_time = ? AND reason = ?
+            """, (coc_tag, date_time, reason))
+            if c.rowcount > 0:
+                print(f"🗑️ [warning] Varování odstraněno: {coc_tag} – {date_time} – {reason}")
+            else:
+                print(f"❌ [warning] Varování nenalezeno nebo neodpovídá parametrům.")
+            conn.commit()
+    except Exception as e:
+        print(f"❌ [database] Chyba při mazání varování: {e}")
