@@ -156,7 +156,7 @@ async def setup_mod_commands(bot):
         if not interaction.user.guild_permissions.moderate_members:
             await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
             return
-        add_warning(coc_tag, date_time, reason)
+        add_warning(coc_tag, date_time, reason, bot)
         await interaction.response.send_message(f"✅ Varování přidáno pro {coc_tag}.", ephemeral=True)
 
     @bot.tree.command(name="list_warnings", description="Vypíše všechna varování v konzoli", guild=bot.guild_object)
