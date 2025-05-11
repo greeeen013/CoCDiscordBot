@@ -5,6 +5,25 @@ from database import get_all_members, get_all_links
 from role_giver import update_roles
 from verification import start_verification_permission
 
+TOWN_HALL_EMOJIS = {
+    17: "<:town_hall_17:1365445408096129165>",
+    16: "<:town_hall_16:1365445406854615143>",
+    15: "<:town_hall_15:1365445404467925032>",
+    14: "<:town_hall_14:1365445402463043664>",
+    13: "<:town_hall_13:1365445400177147925>",
+    12: "<:town_hall_12:1365445398411477082>",
+    11: "<:town_hall_11:1365445395173347458>",
+    10: "<:town_hall_10:1365445393680437369>",
+    # atd...
+}
+HEROES_EMOJIS = {
+    "Barbarian King": "<:barbarian_king:1371137125818568764>",
+    "Archer Queen": "<:archer_queen:1371137339589394432>",
+    "Grand Warden": "<:grand_warden:1371137633891254353>",
+    "Royal Champion": "<:royal_champion:1371137975412592690>",
+    "Minion Prince": "<:minion_prince:1371138182619463713>",
+}
+
 # Třídy pro ověřování
 class ConfirmView(discord.ui.View):
     def __init__(self, player, user, bot):
@@ -183,6 +202,47 @@ async def setup_commands(bot):
                 await interaction.followup.send(description, view=view, ephemeral=True)
             else:
                 await interaction.followup.send("⚠️ Našlo se víc než 3 hráči se stejným jménem. Zadej prosím konkrétní tag (#...).", ephemeral=True)
+
+    @bot.tree.command(name="max_hero_lvl", description="Zobrazí max levely hrdinů pro dané Town Hall",
+                      guild=bot.guild_object)
+    @app_commands.describe(townhall="Zadej Town Hall (10–17)")
+    async def hero_levels_th(interaction: discord.Interaction, townhall: int):
+        if townhall < 10 or townhall > 17:
+            await interaction.response.send_message("❌ Zadej číslo Town Hall mezi 10 a 17.", ephemeral=True)
+            return
+
+        data = {
+            10: {"Barbarian King": 40, "Archer Queen": 40, "Grand Warden": "N/A", "Royal Champion": "N/A",
+                 "Minion Prince": 20},
+            11: {"Barbarian King": 50, "Archer Queen": 50, "Grand Warden": 20, "Royal Champion": "N/A",
+                 "Minion Prince": 30},
+            12: {"Barbarian King": 65, "Archer Queen": 65, "Grand Warden": 40, "Royal Champion": "N/A",
+                 "Minion Prince": 40},
+            13: {"Barbarian King": 75, "Archer Queen": 75, "Grand Warden": 50, "Royal Champion": 25,
+                 "Minion Prince": 50},
+            14: {"Barbarian King": 80, "Archer Queen": 80, "Grand Warden": 55, "Royal Champion": 30,
+                 "Minion Prince": 60},
+            15: {"Barbarian King": 90, "Archer Queen": 90, "Grand Warden": 65, "Royal Champion": 45,
+                 "Minion Prince": 70},
+            16: {"Barbarian King": 95, "Archer Queen": 95, "Grand Warden": 70, "Royal Champion": 45,
+                 "Minion Prince": "80 *(upraveno)*"},
+            17: {"Barbarian King": 100, "Archer Queen": 100, "Grand Warden": 75, "Royal Champion": 50,
+                 "Minion Prince": "90 *(upraveno)*"},
+        }
+
+        th_data = data[townhall]
+
+        embed = discord.Embed(
+            title=f"{TOWN_HALL_EMOJIS[townhall]} Town Hall {townhall} – Max. levely hrdinů",
+            color=discord.Color.orange()
+        )
+
+        for hero, level in th_data.items():
+            emoji = HEROES_EMOJIS.get(hero, "")
+            embed.add_field(name=f"{emoji} {hero}", value=f"**{level}**", inline=True)
+
+        embed.set_footer(text="Data z officialní clash of clans wiki")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @bot.tree.command(name="helloo", description="Napíše pozdrav", guild=bot.guild_object)
     async def say_hello(interaction: discord.Interaction):
