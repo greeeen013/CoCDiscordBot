@@ -16,6 +16,7 @@ is_hourly_paused = False
 
 # === Funkce pro hodinové tahání dat ===
 async def hourly_clan_update(config: dict, bot):
+    clan_war_handler = ClanWarHandler(bot, config)
     while True:
         if not is_hourly_paused:
             print(f"🕒 [Scheduler] spouštím hourly_clan_update Aktuální datum a čas: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
