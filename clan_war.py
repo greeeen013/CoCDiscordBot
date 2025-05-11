@@ -5,6 +5,8 @@ from typing import Optional
 import json
 import os
 
+from database import notify_single_warning
+
 TOWN_HALL_EMOJIS = {
     17: "<:town_hall_17:1365445408096129165>",
     16: "<:town_hall_16:1365445406854615143>",
@@ -401,6 +403,17 @@ class ClanWarHandler:
             now = datetime.now(timezone.utc)
             delta = end_time - now
             remaining_hours = max(delta.total_seconds() / 3600, 0)
+
+            # === Zjištění, zda je to náš útok, není oprava a není mirror ===
+            if is_our_attack and not is_oprava and attacker.get("mapPosition") != defender.get("mapPosition"):
+                if remaining_hours is not None and remaining_hours >= 5:
+                    from database import add_warning
+                    await notify_single_warning(
+                        bot=self.bot,
+                        coc_tag=attacker.get("tag"),
+                        date_time=datetime.now().strftime("%d/%m/%Y %H:%M"),
+                        reason="clan wars útok který nebyl mirror"
+                    )
 
         footer_parts = [
             f"Útok #{attack.get('order', 0)}",
