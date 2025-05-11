@@ -174,35 +174,6 @@ async def setup_commands(bot):
 
         await interaction.response.send_message("✅ Verifikační tabulka vytvořena a kanál uzamčen!", ephemeral=True)
 
-    @bot.tree.command(name="verifikovat", description="Ověř si svůj účet pomocí jména nebo tagu", guild=bot.guild_object)
-    @app_commands.describe(hledat="Zadej své Clash of Clans jméno nebo tag (#ABCD123)")
-    async def verifikovat(interaction: discord.Interaction, hledat: str):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        clenove = get_all_members()
-
-        if hledat.startswith("#"):
-            nalezeny = next((m for m in clenove if m.get("tag", "").upper() == hledat.upper()), None)
-            if nalezeny:
-                await bot.potvrdit_hrace(interaction, nalezeny)
-            else:
-                await interaction.followup.send("❌ Hráč s tímto tagem nebyl nalezen.")
-        else:
-            shody = [m for m in clenove if m.get("name", "").casefold() == hledat.casefold()]
-            if len(shody) == 0:
-                await interaction.followup.send("❌ Nenašel jsem žádného hráče s tímto jménem.")
-            elif len(shody) == 1:
-                await bot.potvrdit_hrace(interaction, shody[0])
-            elif len(shody) <= 3:
-                view = SelectPlayerView(shody, interaction.user, bot, interaction)
-                description = ""
-                emojis = ["1️⃣", "2️⃣", "3️⃣"]
-                for i, player in enumerate(shody):
-                    description += f"{emojis[i]} {player['name']} ({player['tag']}) | 🏆 {player['trophies']} | TH{player['townHallLevel']}\n"
-
-                await interaction.followup.send(description, view=view, ephemeral=True)
-            else:
-                await interaction.followup.send("⚠️ Našlo se víc než 3 hráči se stejným jménem. Zadej prosím konkrétní tag (#...).", ephemeral=True)
-
     @bot.tree.command(name="max_hero_lvl", description="Zobrazí max levely hrdinů pro dané Town Hall",
                       guild=bot.guild_object)
     @app_commands.describe(townhall="Zadej Town Hall (10–17)")
