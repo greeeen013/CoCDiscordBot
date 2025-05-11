@@ -52,9 +52,57 @@ class ClanWarHandler:
         self.config = config
         self.war_status_channel_id = 1366835944174391379
         self.war_events_channel_id = 1366835971395686554
+        self.war_ping_channel_id = 1371089891621998652
         self.last_processed_order = load_room_id("last_war_event_order") or 0
         self.current_war_message_id = load_room_id("war_status_message")
         self._last_state = None
+
+    async def remind_missing_attacks(self, war_data: dict):
+        """
+        Odešle upozornění do vybraného kanálu, pokud zbývá 7h, 3h nebo 1h do konce války
+        a někteří hráči ještě neodehráli ani jeden útok. Každé upozornění se odešle jen jednou.
+        """
+        end_time = self._parse_coc_time(war_data.get('endTime', ''))
+        if not end_time:
+            return
+
+        now = datetime.now(timezone.utc)
+        remaining_hours = (end_time - now).total_seconds() / 3600
+        hour_marks = [7, 3, 1]
+
+        for mark in hour_marks:
+            key = f"war_reminder_{mark}h"
+            already_sent = load_room_id(key)
+
+            if remaining_hours <= mark and not already_sent:
+                missing = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
+                if not missing:
+                    save_room_id(key, True)
+                    continue
+
+                ping_channel = self.bot.get_channel(self.war_ping_channel_id)
+                mention = "<@317724566426222592>"
+
+                mentions = []
+                for m in missing:
+                    tag = m.get("tag")
+                    name = m.get("name", "Unknown").replace('_', r'\_').replace('*', r'\*')
+                    discord_mention = await self._get_discord_mention(tag)
+                    if discord_mention:
+                        mentions.append(discord_mention)
+                    else:
+                        mentions.append(f"@{name}")
+
+                # Zpráva podle urgency
+                if mark == 1:
+                    await ping_channel.send(f"{mention} ⚠️ **POSLEDNÍ VAROVÁNÍ – méně než 1 hodina do konce!**")
+                else:
+                    await ping_channel.send(f"{mention} Připomínka: zbývá méně než {mark}h do konce války")
+
+                for i in range(0, len(mentions), 5):
+                    await ping_channel.send(" ".join(mentions[i:i + 5]))
+
+                save_room_id(key, True)
 
     async def process_war_data(self, war_data: dict):
         """Zpracuje data o válce a aktualizuje Discord"""
@@ -79,6 +127,9 @@ class ClanWarHandler:
             return
 
         try:
+            # Připomenutí hráčům bez útoku
+            await self.remind_missing_attacks(war_data)
+
             # Aktualizace stavu války
             await self.update_war_status(war_data)
 
