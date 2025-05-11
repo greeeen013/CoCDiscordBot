@@ -1,5 +1,5 @@
 import discord
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import json
 import os
@@ -132,10 +132,13 @@ class ClanCapitalHandler:
         state = capital_data.get('state', 'unknown')
 
         # Pokud se stav změnil od minula, informujeme v konzoli
-        if state != self._last_state:
-            print(f"ℹ️ [clan_capital] Stav se změnil na: {state}")
+        if self._last_state is None:
+            print("ℹ️ [clan_capital] První zpracování dat, žádný předchozí stav k porovnání.")
+        elif state != self._last_state:
+            print(f"❌ [clan_capital] stav se změnil z {self._last_state} -> {state}")
 
         self._last_state = state
+
 
         if state == "ongoing":
             embed = self._create_capital_embed(state, capital_data)
@@ -183,10 +186,10 @@ class ClanCapitalHandler:
 
     def _parse_time(self, raw_time: str) -> Optional[datetime]:
         """
-        Převede čas ve formátu z Clash of Clans API (např. 20250509T070000.000Z)
-        na datetime objekt v Pythonu.
+        Převede čas z CoC API (např. 20250509T070000.000Z) na UTC datetime.
+        Vrací offset-aware objekt v UTC (pro správné výpočty).
         """
         try:
-            return datetime.strptime(raw_time, "%Y%m%dT%H%M%S.%fZ")
+            return datetime.strptime(raw_time, "%Y%m%dT%H%M%S.%fZ").replace(tzinfo=timezone.utc)
         except Exception:
             return None
