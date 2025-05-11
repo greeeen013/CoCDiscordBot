@@ -353,17 +353,33 @@ class ClanWarHandler:
         left_th = attacker.get('townhallLevel', 10) if is_our_attack else defender.get('townhallLevel', 10)
         right_th = defender.get('townhallLevel', 10) if is_our_attack else attacker.get('townhallLevel', 10)
 
+        # Oprava: kontrola počtu útoků na daného obránce (stejná mapPosition)
+        defender_position = defender.get("mapPosition")
+        all_attacks = []
+        for member in war_data.get('clan', {}).get('members', []) + war_data.get('opponent', {}).get('members', []):
+            all_attacks.extend(member.get('attacks', []))
+
+        duplicate_attacks = [a for a in all_attacks if
+                             a.get('defenderTag') == defender.get('tag') and a.get('order', 0) < attack.get('order', 0)]
+        is_oprava = len(duplicate_attacks) > 0
+
         left_side = (
             f"**{clan_name}**\n"
-            f"#{(left_pos or 0) + 1} | {TOWN_HALL_EMOJIS.get(left_th, '')} {left_name}"
+            f"#{(left_pos or 1)} | {TOWN_HALL_EMOJIS.get(left_th, '')} {left_name}"
         )
         if discord_mention and is_our_attack:
             left_side += f"\n{discord_mention}"
 
         right_side = (
             f"**{opponent_name}**\n"
-            f"#{(right_pos or 0) + 1} | {TOWN_HALL_EMOJIS.get(right_th, '')} {right_name}"
+            f"#{(right_pos or 1)} | {TOWN_HALL_EMOJIS.get(right_th, '')} {right_name}"
         )
+        # pokud není náš útok, a je to oprava, tak přidáme mention
+        #if not is_our_attack and is_oprava:
+        #    left_side += f"\n`oprava`"
+
+        if is_our_attack and is_oprava:
+            right_side += f"\n`oprava`"
 
         action = "**ÚTOK** ⚔️" if is_our_attack else "**OBRANA** 🛡️"
         arrow = "➡️" if is_our_attack else "⬅️"
@@ -382,7 +398,6 @@ class ClanWarHandler:
         end_time = self._parse_coc_time(war_data.get('endTime', ''))
         remaining_hours = None
         if end_time:
-            from datetime import datetime
             now = datetime.now(timezone.utc)
             delta = end_time - now
             remaining_hours = max(delta.total_seconds() / 3600, 0)
