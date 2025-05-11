@@ -157,7 +157,7 @@ class ClanWarHandler:
         )
 
         embed.add_field(name=f"**{clan.get('name', 'Náš klan')}**", value=our_stats, inline=True)
-        embed.add_field(name="\u200b", value="⁣    **𝐇𝐒**", inline=True)
+        embed.add_field(name="\u200b", value="⁣  **VS**", inline=True)
         embed.add_field(name=f"**{opponent.get('name', 'Protivník')}**", value=their_stats, inline=True)
 
         # Časy
@@ -234,9 +234,9 @@ class ClanWarHandler:
                     embed.add_field(name="**Jejich hráči**", value=their_value, inline=True)
                 else:
                     embed.add_field(name=" ", value=" ", inline=False)
-                    embed.add_field(name=f" ", value=our_value, inline=True)
+                    embed.add_field(name=f"**Naši hráči**", value=our_value, inline=True)
                     embed.add_field(name=" ", value=" ", inline=True)
-                    embed.add_field(name=f" ", value=their_value, inline=True)
+                    embed.add_field(name=f"**Jejich hráči**", value=their_value, inline=True)
 
         embed.set_footer(text=f"Stav války: {state}")
         return embed
@@ -302,10 +302,13 @@ class ClanWarHandler:
         left_prefix = f"#{left_pos + 1} | " if left_pos is not None else ""
         right_prefix = f"#{right_pos + 1} | " if right_pos is not None else ""
 
+        left_name = left_side.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*')
+        right_name = right_side.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*')
+
         # Levá strana (náš hráč)
         left_field = (
+            f"{left_prefix}{TOWN_HALL_EMOJIS.get(left_side.get('townhallLevel', 10), '')} {left_name}"
             f"{discord_mention or ''}\n"
-            f"{left_prefix}{TOWN_HALL_EMOJIS.get(left_side.get('townhallLevel', 10), '')} {left_side.get('name', 'Unknown')}"
         )
 
         # Prostřední akce
@@ -317,14 +320,24 @@ class ClanWarHandler:
 
         # Pravá strana (protivník)
         right_field = (
-            f"{right_prefix}{TOWN_HALL_EMOJIS.get(right_side.get('townhallLevel', 10), '')} {right_side.get('name', 'Unknown')}"
+            f"{right_prefix}{TOWN_HALL_EMOJIS.get(right_side.get('townhallLevel', 10), '')} {right_name}"
         )
 
         embed.add_field(name="\u200b", value=left_field, inline=True)
         embed.add_field(name="\u200b", value=middle_field, inline=True)
         embed.add_field(name="\u200b", value=right_field, inline=True)
 
-        embed.set_footer(text=f"Útok #{attack.get('order', 0)} | Trvání: {attack.get('duration', 0)}s")
+        # Výpočet času do konce války
+        end_time = self._parse_coc_time(war_data.get('endTime', ''))
+        remaining_hours = None
+        if end_time:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            delta = end_time - now
+            remaining_hours = max(delta.total_seconds() / 3600, 0)
+
+
+        embed.set_footer(text=f"Útok #{attack.get('order', 0)} | Trvání: {attack.get('duration', 0)}s | Zbývá: {remaining_hours:.1f}h")
         await channel.send(embed=embed)
 
     def _find_member_by_tag(self, tag: str, war_data: dict) -> Optional[dict]:
