@@ -8,6 +8,7 @@ from verification import start_verification_permission  # Importuj funkci ze sou
 from role_giver import update_roles # Import funkce pro získání mapování mezi Discord ID a tagy hráčů
 from bot_commands import setup_commands, VerifikacniView, ConfirmView # Import funkcí a tříd pro nastavení příkazů a ověřovacího pohledu
 from mod_commands import setup_mod_commands # Import funkcí pro nastavení moderátorských příkazů
+from database import WarningReviewView  # nebo odkud tu třídu máš
 
 VERIFICATION_PATH = "verification_data.json" # Definování konstanty s cestou k souboru, kde se ukládá info o zprávě pro verifikaci
 TOWN_HALL_EMOJIS = {
@@ -55,6 +56,7 @@ class MyBot(commands.Bot):
         print(f"✅🤖 Přihlášen jako {self.user}")
         self.add_view(VerifikacniView())
         asyncio.create_task(hourly_clan_update(self.config, self))
+
 
     async def potvrdit_hrace(self, interaction, player):
         embed = discord.Embed(
