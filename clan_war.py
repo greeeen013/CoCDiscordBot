@@ -131,7 +131,7 @@ class ClanWarHandler:
             save_room_id("war_status_message", None)
 
             # === Oznámení o neodehraných útocích ===
-            war_end_channel = self.bot.get_channel(1371170358056452176)
+            war_end_channel = self.bot.get_channel(1371199158060585030)
             missing = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
             if war_end_channel and missing:
                 await war_end_channel.send("⚠️ Následující hráči **neodehráli** útoky ve válce:")
