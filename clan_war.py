@@ -404,10 +404,19 @@ class ClanWarHandler:
             delta = end_time - now
             remaining_hours = max(delta.total_seconds() / 3600, 0)
 
-            # === Zjištění, zda je to náš útok, není oprava a není mirror ===
+            # === Pochvala: útok na mirror, 100 %, včas ===
+            if is_our_attack and attacker.get("mapPosition") == defender.get("mapPosition") and attack.get(
+                    "destructionPercentage", 0) == 100:
+                if remaining_hours is not None and remaining_hours >= 5:
+                    praise_channel = self.bot.get_channel(1371170358056452176)
+                    discord_mention = await self._get_discord_mention(attacker.get("tag"))
+                    name_or_mention = discord_mention or f"@{attacker.get('name', 'neznámý')}"
+                    if praise_channel:
+                        await praise_channel.send(f"{name_or_mention}\nPochvala za krásný útok na mirror včas!")
+
+            # === Varování: špatný útok na jiné číslo před 5. hodinou od konce ===
             if is_our_attack and not is_oprava and attacker.get("mapPosition") != defender.get("mapPosition"):
                 if remaining_hours is not None and remaining_hours >= 5:
-                    from database import add_warning
                     await notify_single_warning(
                         bot=self.bot,
                         coc_tag=attacker.get("tag"),
