@@ -1,6 +1,6 @@
 import discord
 from discord.utils import escape_markdown
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import json
 import os
@@ -332,7 +332,7 @@ class ClanWarHandler:
         remaining_hours = None
         if end_time:
             from datetime import datetime
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             delta = end_time - now
             remaining_hours = max(delta.total_seconds() / 3600, 0)
 
@@ -371,8 +371,8 @@ class ClanWarHandler:
         return None
 
     def _parse_coc_time(self, time_str: str) -> Optional[datetime]:
-        """Parsuje čas z API CoC"""
+        """Parsuje čas z API CoC a vrací offset-aware UTC datetime"""
         try:
-            return datetime.strptime(time_str, "%Y%m%dT%H%M%S.000Z")
+            return datetime.strptime(time_str, "%Y%m%dT%H%M%S.000Z").replace(tzinfo=timezone.utc)
         except (ValueError, AttributeError):
             return None
