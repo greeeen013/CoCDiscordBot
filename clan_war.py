@@ -104,6 +104,15 @@ class ClanWarHandler:
                 for i in range(0, len(mentions), 5):
                     await ping_channel.send(" ".join(mentions[i:i + 5]))
 
+                # === Veřejné označení hráčů, kteří ještě neútočili ===
+                public_channel = self.bot.get_channel(1371199158060585030)
+                if public_channel:
+                    for m in missing:
+                        tag = m.get("tag")
+                        discord_mention = await self._get_discord_mention(tag)
+                        if discord_mention:
+                            await public_channel.send(f"{discord_mention} ⚠️ Připomínka: ještě jsi neodehrál válku.")
+
                 save_room_id(key, True)
 
     async def process_war_data(self, war_data: dict):
@@ -120,6 +129,24 @@ class ClanWarHandler:
             #await self._clear_war_channels()
             self.current_war_message_id = None
             save_room_id("war_status_message", None)
+
+            # === Oznámení o neodehraných útocích ===
+            war_end_channel = self.bot.get_channel(1371170358056452176)
+            missing = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
+            if war_end_channel and missing:
+                await war_end_channel.send("⚠️ Následující hráči **neodehráli** útoky ve válce:")
+                mentions = []
+                for m in missing:
+                    tag = m.get("tag")
+                    name = m.get("name", "Unknown")
+                    discord_mention = await self._get_discord_mention(tag)
+                    if discord_mention:
+                        mentions.append(discord_mention)
+                    else:
+                        mentions.append(f"@{name}")
+
+                for i in range(0, len(mentions), 5):
+                    await war_end_channel.send(" ".join(mentions[i:i + 5]))
 
         # Aktualizuj uložený stav až po kontrole
         self._last_state = state
