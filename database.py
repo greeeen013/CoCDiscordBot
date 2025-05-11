@@ -362,20 +362,16 @@ class WarningReviewView(View):
                 """, (self.coc_tag, self.date_time, self.reason))
                 conn.commit()
 
-            # 1. nejdřív odpověz
-            msg = await interaction.response.send_message(
-                f"✅ Varování pro {self.coc_tag} bylo uloženo.",
-                ephemeral=False
-            )
-
-            # 2. pak smaž původní zprávu
             await interaction.message.delete()
 
-            # 3. počkej a smaž potvrzovací zprávu
-            sent_msg = await interaction.original_response()
-            print(f"✅ [database] [review] {interaction.user.name} ({interaction.user.id}) potvrdil varování: {self.coc_tag} – {self.reason}")
-            await asyncio.sleep(20)
-            await sent_msg.delete()
+            log_channel = interaction.channel  # nebo pevně daný logovací kanál
+            await log_channel.send(
+                f"✅ {interaction.user.mention} potvrdil varování pro **{self.coc_tag}**\n"
+                f"📆 {self.date_time}\n📝 {self.reason}"
+            )
+
+            print(
+                f"✅ [review] {interaction.user.name} ({interaction.user.id}) potvrdil varování: {self.coc_tag} – {self.reason}")
 
         except Exception as e:
             await interaction.followup.send(
@@ -385,15 +381,16 @@ class WarningReviewView(View):
 
     @discord.ui.button(label="❌ Zrušit", style=discord.ButtonStyle.red)
     async def reject(self, interaction: discord.Interaction, button: Button):
-        msg = await interaction.response.send_message(
-            f"❌ Varování pro {self.coc_tag} bylo zamítnuto.",
-            ephemeral=False
-        )
         await interaction.message.delete()
-        sent_msg = await interaction.original_response()
-        print(f"❌ [database] [review] {interaction.user.name} ({interaction.user.id}) zamítl varování: {self.coc_tag} – {self.reason}")
-        await asyncio.sleep(20)
-        await sent_msg.delete()
+
+        log_channel = interaction.channel
+        await log_channel.send(
+            f"❌ {interaction.user.mention} zamítl varování pro **{self.coc_tag}**\n"
+            f"📆 {self.date_time}\n📝 {self.reason}"
+        )
+
+        print(
+            f"❌ [review] {interaction.user.name} ({interaction.user.id}) zamítl varování: {self.coc_tag} – {self.reason}")
 
 # === Upozornění při 3+ varováních a oznámení na Discord ===
 async def notify_warnings_exceed(bot: discord.Client):
