@@ -123,7 +123,7 @@ class ClanWarHandler:
 
         state = war_data.get('state', 'unknown')
 
-        # Pokud se stav změnil na warEnded, smaž obsah kanálů
+        # Pokud se stav změnil na warEnded mělo by proběhnout jen 1x
         if state == 'warEnded' and self._last_state != 'warEnded':
             # pokud chceme smazat mistnost tak odkomentujeme funkci
             #await self._clear_war_channels()
@@ -131,11 +131,12 @@ class ClanWarHandler:
             save_room_id("war_status_message", None)
 
             # === Oznámení o neodehraných útocích ===
-            war_end_channel = self.bot.get_channel(1371199158060585030)
+            war_end_channel = self.bot.get_channel(self.war_ping_channel_id)
             missing = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
             if war_end_channel and missing:
-                await war_end_channel.send("⚠️ Následující hráči **neodehráli** útoky ve válce:")
+                await war_end_channel.send("🚨 Následující hráči **neodehráli** útoky ve válce: 🚨")
                 mentions = []
+
                 for m in missing:
                     tag = m.get("tag")
                     name = m.get("name", "Unknown")
@@ -145,10 +146,19 @@ class ClanWarHandler:
                     else:
                         mentions.append(f"@{name}")
 
+                    # ⚠️ Přidání varování za neodehranou válku
+                    await notify_single_warning(
+                        bot=self.bot,
+                        coc_tag=tag,
+                        date_time=datetime.now().strftime("%d/%m/%Y %H:%M"),
+                        reason="neodehraná clan war válka"
+                    )
+
                 for i in range(0, len(mentions), 5):
                     await war_end_channel.send(" ".join(mentions[i:i + 5]))
 
         # Aktualizuj uložený stav až po kontrole
+        print(f"✅ [clan_war] Aktuální stav války: {state} minulý stav {self._last_state}")
         self._last_state = state
 
         # Pokud není ve válce nebo přípravě, nedělej nic dalšího

@@ -42,7 +42,7 @@ async def hourly_clan_update(config: dict, bot):
             print("✅ [Scheduler] Aktualizace rolí dokončena.")
 
             # === WAR STATUS ===
-            clan_war_handler = ClanWarHandler(bot, config)
+
             war_data = await fetch_current_war("#2QQ0PY9V8", config)
             if war_data:
                 await clan_war_handler.process_war_data(war_data)
