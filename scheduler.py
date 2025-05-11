@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 
 from api_handler import fetch_clan_members_list, fetch_player_data
-from database import process_clan_data, get_all_links, get_all_members
+from database import process_clan_data, get_all_links, get_all_members, cleanup_old_warnings
 from role_giver import update_roles
 from api_handler import fetch_current_war, fetch_current_capital
 from clan_war import ClanWarHandler
@@ -56,6 +56,9 @@ async def hourly_clan_update(config: dict, bot):
             # === GAME EVENTS ===
             game_events_handler = GameEventsHandler(bot, config)
             await game_events_handler.process_game_events()
+
+            # === mazání a upozornění ohledně varováních ===
+            await cleanup_old_warnings()
 
 
         else:
