@@ -61,7 +61,7 @@ class ClanWarHandler:
 
     async def remind_missing_attacks(self, war_data: dict):
         """
-        Odešle upozornění do vybraného kanálu, pokud zbývá 7h, 3h nebo 1h do konce války
+        Odešle upozornění do vybraného kanálu, pokud zbývá 6h, 2h nebo 1h do konce války
         a někteří hráči ještě neodehráli ani jeden útok. Každé upozornění se odešle jen jednou.
         """
         end_time = self._parse_coc_time(war_data.get('endTime', ''))
@@ -70,7 +70,7 @@ class ClanWarHandler:
 
         now = datetime.now(timezone.utc)
         remaining_hours = (end_time - now).total_seconds() / 3600
-        hour_marks = [7, 3, 1]
+        hour_marks = [6, 2, 1]
 
         for mark in hour_marks:
             key = f"war_reminder_{mark}h"
