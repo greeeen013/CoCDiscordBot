@@ -168,7 +168,7 @@ class ClanWarHandler:
         time_fields = [
             ("🛡️ Příprava začala", prep_time),
             ("⚔️ Válka začala", start_time),
-            ("🌟 Konec války", end_time)
+            ("🏁 Konec války", end_time)
         ]
 
         for name, time in time_fields:
@@ -264,6 +264,7 @@ class ClanWarHandler:
             await self._send_attack_embed(channel, attack, war_data)
             self.last_processed_order = max(self.last_processed_order, attack.get('order', 0))
             save_room_id("last_war_event_order", self.last_processed_order)
+
     async def _send_attack_embed(self, channel, attack: dict, war_data: dict):
         """Vytvoří embed pro jeden útok"""
         attacker = self._find_member_by_tag(attack.get('attackerTag'), war_data)
@@ -279,65 +280,70 @@ class ClanWarHandler:
         if discord_mention:
             print(f"✅ [clan_war] Nalezen Discord uživatel pro tag {attack.get('attackerTag')}: {discord_mention}")
 
-        embed = discord.Embed(
-            color=discord.Color.green() if attack.get('stars', 0) == 3 else
-            discord.Color.orange() if attack.get('stars', 0) >= 1 else
-            discord.Color.red()
+        # Barva podle typu akce
+        embed_color = discord.Color.red() if is_our_attack else discord.Color.blue()
+        embed = discord.Embed(color=embed_color)
+
+        # Escape jména hráčů
+        attacker_name = attacker.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*')
+        defender_name = defender.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*')
+
+        # Escape jména klanů
+        clan_name = war_data.get('clan', {}).get('name', 'Náš klan').replace('_', r'\_').replace('*', r'\*')
+        opponent_name = war_data.get('opponent', {}).get('name', 'Protivník').replace('_', r'\_').replace('*', r'\*')
+
+        # Levá strana = náš klan, Pravá strana = protivník (vždy stejně)
+        left_pos = attacker.get("mapPosition") if is_our_attack else defender.get("mapPosition")
+        right_pos = defender.get("mapPosition") if is_our_attack else attacker.get("mapPosition")
+
+        left_name = attacker_name if is_our_attack else defender_name
+        right_name = defender_name if is_our_attack else attacker_name
+
+        left_th = attacker.get('townhallLevel', 10) if is_our_attack else defender.get('townhallLevel', 10)
+        right_th = defender.get('townhallLevel', 10) if is_our_attack else attacker.get('townhallLevel', 10)
+
+        left_side = (
+            f"**{clan_name}**\n"
+            f"#{(left_pos or 0) + 1} | {TOWN_HALL_EMOJIS.get(left_th, '')} {left_name}"
+        )
+        if discord_mention and is_our_attack:
+            left_side += f"\n{discord_mention}"
+
+        right_side = (
+            f"**{opponent_name}**\n"
+            f"#{(right_pos or 0) + 1} | {TOWN_HALL_EMOJIS.get(right_th, '')} {right_name}"
         )
 
-        if is_our_attack:
-            left_side = attacker
-            right_side = defender
-            action = "**ÚTOK** ⚔️"
-            arrow = "➡️"
-        else:
-            left_side = defender
-            right_side = attacker
-            action = "**OBRANA** 🛡️"
-            arrow = "⬅️"
+        action = "**ÚTOK** ⚔️" if is_our_attack else "**OBRANA** 🛡️"
+        arrow = "➡️" if is_our_attack else "⬅️"
 
-        # Pořadí hráčů (pozice)
-        left_pos = left_side.get("mapPosition")
-        right_pos = right_side.get("mapPosition")
-        left_prefix = f"#{left_pos + 1} | " if left_pos is not None else ""
-        right_prefix = f"#{right_pos + 1} | " if right_pos is not None else ""
-
-        left_name = left_side.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*')
-        right_name = right_side.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*')
-
-        # Levá strana (náš hráč)
-        left_field = (
-            f"{left_prefix}{TOWN_HALL_EMOJIS.get(left_side.get('townhallLevel', 10), '')} {left_name}"
-            f"{discord_mention or ''}\n"
-        )
-
-        # Prostřední akce
         middle_field = (
             f"{action}\n"
             f"{arrow}   {'⭐' * attack.get('stars', 0)}\n"
             f"   {attack.get('destructionPercentage', 0)}%"
         )
 
-        # Pravá strana (protivník)
-        right_field = (
-            f"{right_prefix}{TOWN_HALL_EMOJIS.get(right_side.get('townhallLevel', 10), '')} {right_name}"
-        )
-
-        embed.add_field(name="\u200b", value=left_field, inline=True)
+        embed.add_field(name="\u200b", value=left_side, inline=True)
         embed.add_field(name="\u200b", value=middle_field, inline=True)
-        embed.add_field(name="\u200b", value=right_field, inline=True)
+        embed.add_field(name="\u200b", value=right_side, inline=True)
 
         # Výpočet času do konce války
         end_time = self._parse_coc_time(war_data.get('endTime', ''))
         remaining_hours = None
         if end_time:
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc)
+            from datetime import datetime
+            now = datetime.utcnow()
             delta = end_time - now
             remaining_hours = max(delta.total_seconds() / 3600, 0)
 
+        footer_parts = [
+            f"Útok #{attack.get('order', 0)}",
+            f"Útok trval: {attack.get('duration', 0)}s"
+        ]
+        if remaining_hours is not None:
+            footer_parts.append(f"Do konce war: {remaining_hours:.1f}h")
 
-        embed.set_footer(text=f"Útok #{attack.get('order', 0)} | Trvání: {attack.get('duration', 0)}s | Zbývá: {remaining_hours:.1f}h")
+        embed.set_footer(text=" | ".join(footer_parts))
         await channel.send(embed=embed)
 
     def _find_member_by_tag(self, tag: str, war_data: dict) -> Optional[dict]:
