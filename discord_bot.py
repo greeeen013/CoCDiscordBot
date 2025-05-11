@@ -1,14 +1,13 @@
+import time
+from datetime import timedelta
+from collections import defaultdict, deque
+
 import discord # Import základní knihovny discord.py
-from discord import app_commands
 from discord.ext import commands # Import třídy commands z discord.ext.commands pro práci s příkazy a bota
 import asyncio # Import knihovny asyncio pro asynchronní programování (např. čekání na události)
 from scheduler import hourly_clan_update # Import funkce pro hodinovou aktualizaci členů klanu
-from database import get_all_members, get_all_links # Import funkce, která načítá všechny hráče z databáze
-from verification import start_verification_permission  # Importuj funkci ze souboru verification.py
-from role_giver import update_roles # Import funkce pro získání mapování mezi Discord ID a tagy hráčů
 from bot_commands import setup_commands, VerifikacniView, ConfirmView # Import funkcí a tříd pro nastavení příkazů a ověřovacího pohledu
 from mod_commands import setup_mod_commands # Import funkcí pro nastavení moderátorských příkazů
-from database import WarningReviewView  # nebo odkud tu třídu máš
 
 VERIFICATION_PATH = "verification_data.json" # Definování konstanty s cestou k souboru, kde se ukládá info o zprávě pro verifikaci
 TOWN_HALL_EMOJIS = {
@@ -41,6 +40,11 @@ class MyBot(commands.Bot):
         self.guild_object = discord.Object(id=guild_id)
         self.clan_tag = clan_tag
         self.config = config
+        # Proti-spam monitor: user_id -> deque časových razítek
+        self.message_history = defaultdict(lambda: deque(maxlen=10))
+        self.timeout_levels = defaultdict(int)  # user_id -> počet porušení
+        self.failed_timeout_cache = set()  # user_id -> kdo již selhal s timeoutem
+        self.log_channel_id = 1371089891621998652
 
     async def setup_hook(self):
         await setup_commands(self)
@@ -57,6 +61,43 @@ class MyBot(commands.Bot):
         self.add_view(VerifikacniView())
         asyncio.create_task(hourly_clan_update(self.config, self))
 
+    async def on_ready(self):
+        print(f"✅🤖 Přihlášen jako {self.user}")
+        self.add_view(VerifikacniView())
+        asyncio.create_task(hourly_clan_update(self.config, self))
+
+    async def on_message(self, message):
+        if message.author.bot or not message.guild:
+            return
+
+        now = time.time()
+        user_id = message.author.id
+
+        self.message_history[user_id].append(now)
+        timestamps = self.message_history[user_id]
+
+        # Kontrola 10 zpráv v 5 sekundách
+        if len(timestamps) == 10 and timestamps[-1] - timestamps[0] <= 5:
+            self.timeout_levels[user_id] += 1
+            timeout_minutes = min(60, 1 * (2 ** (self.timeout_levels[user_id] - 1)))
+
+            try:
+                await message.author.timeout(timedelta(minutes=timeout_minutes), reason="Anti-spam ochrana")
+                await message.channel.send(f"{message.author.mention} byl automaticky umlčen na {timeout_minutes} min. za spam.")
+                print(f"⚠️ [antispam] {message.author} timeout na {timeout_minutes} min (level {self.timeout_levels[user_id]})")
+                if user_id in self.failed_timeout_cache:
+                    self.failed_timeout_cache.remove(user_id)
+            except Exception as e:
+                if user_id not in self.failed_timeout_cache:
+                    print(f"❌ [antispam] Nepodařilo se umlčet {message.author}: {e}")
+                    self.failed_timeout_cache.add(user_id)
+
+                    # Log do logovacího kanálu
+                    log_channel = self.get_channel(self.log_channel_id)
+                    if log_channel:
+                        await log_channel.send(f"❌ Nepodařilo se umlčet {message.author.mention} (`{message.author.id}`): `{str(e)}`")
+
+        await self.process_commands(message)
 
     async def potvrdit_hrace(self, interaction, player):
         embed = discord.Embed(
