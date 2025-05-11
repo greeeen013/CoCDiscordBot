@@ -153,7 +153,7 @@ async def setup_mod_commands(bot):
     )
     async def add_warning_cmd(interaction: discord.Interaction, coc_tag: str, date_time: str = None,
                               reason: str = None):
-        if not interaction.user.guild_permissions.moderate_members:
+        if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
             return
         add_warning(coc_tag, date_time, reason, bot)
@@ -174,7 +174,7 @@ async def setup_mod_commands(bot):
         reason="Přesný důvod varování"
     )
     async def remove_warning_cmd(interaction: discord.Interaction, coc_tag: str, date_time: str, reason: str):
-        if not interaction.user.guild_permissions.moderate_members:
+        if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
             return
         remove_warning(coc_tag, date_time, reason)
