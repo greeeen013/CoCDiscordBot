@@ -17,6 +17,7 @@ is_hourly_paused = False
 # === Funkce pro hodinové tahání dat ===
 async def hourly_clan_update(config: dict, bot):
     clan_war_handler = ClanWarHandler(bot, config)
+    clan_capital_handler = ClanCapitalHandler(bot, config)
     while True:
         if not is_hourly_paused:
             print(f"🕒 [Scheduler] spouštím hourly_clan_update Aktuální datum a čas: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
@@ -43,13 +44,12 @@ async def hourly_clan_update(config: dict, bot):
             print("✅ [Scheduler] Aktualizace rolí dokončena.")
 
             # === WAR STATUS ===
-
             war_data = await fetch_current_war("#2QQ0PY9V8", config)
             if war_data:
                 await clan_war_handler.process_war_data(war_data)
 
             # === CAPITAL STATUS ===
-            clan_capital_handler = ClanCapitalHandler(bot, config)
+
             capital_data = await fetch_current_capital(config["CLAN_TAG"], config)
             if capital_data:
                 await clan_capital_handler.process_capital_data(capital_data)
