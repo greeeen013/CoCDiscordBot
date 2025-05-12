@@ -51,22 +51,16 @@ class ClanCapitalHandler:
         self.bot = bot                                                                  # Discord bot instance
         self.config = config                                                            # Konfigurační slovník (obsahuje např. COC API klíč, GUILD_ID apod.)
         self.capital_status_channel_id = 1370467834932756600                            # ID Discord kanálu, kam se bude embed posílat
+        self.announcement_channel_id = 1371170358056452176                              # ID kanálu pro oznámení nejlepšího výsledku
         self.current_capital_message_id = load_room_id("capital_status_message")        # načtení ID zprávy z JSON souboru
         self._last_state = None                                                         # Sleduje předchozí stav (např. 'ongoing', 'ended')
+        self._has_announced_end = False                                                 # Flag pro sledování, zda byl oznámen konec raidu
+        self._best_result_sent = False                                                  # Flag pro sledování, zda byl odeslán nejlepší výsledek
 
     def _create_capital_embed(self, state: str, data: dict) -> discord.Embed:
         """
         Vytvoří a vrátí embed podle stavu capital raidu ('ongoing' nebo 'ended').
         """
-        if state == "ended":
-            # Embed pro ukončený raid
-            embed = discord.Embed(
-                title="🏁 Capital Raid: Ukončeno",
-                description="Statistiky budou doplněny později...",
-                color=discord.Color.red()
-            )
-            embed.set_footer(text="Stav: ended")
-            return embed
 
         # Embed pro probíhající raid
         start = self._parse_time(data.get("startTime"))      # začátek jako datetime
@@ -133,25 +127,61 @@ class ClanCapitalHandler:
 
         # Pokud se stav změnil od minula, informujeme v konzoli
         if self._last_state is None:
-            print("ℹ️ [clan_capital] První zpracování dat, žádný předchozí stav k porovnání.")
+            print("ℹ️ [clan_capital] První zpracování dat.")
         elif state != self._last_state:
-            print(f"❌ [clan_capital] stav se změnil z {self._last_state} -> {state}")
+            print(f"🔁 [clan_capital] Stav se změnil z {self._last_state} -> {state}")
 
-        self._last_state = state
+            # První zjištění 'ended'
+        if state == "ended" and not self._has_announced_end:
+            self._has_announced_end = True
 
+            # ✅ Upravíme embed zprávu naposledy – jen změníme footer na 'Stav: ended'
+            if self.current_capital_message_id:
+                channel = self.bot.get_channel(self.capital_status_channel_id)
+                try:
+                    msg = await channel.fetch_message(self.current_capital_message_id)
+                    embed = msg.embeds[0]
+                    embed.set_footer(text="Stav: ended")
+                    await msg.edit(embed=embed)
+                    print("✅ [clan_capital] Footer embedu upraven na 'Stav: ended'.")
+                except Exception as e:
+                    print(f"⚠️ [clan_capital] Nepodařilo se upravit embed: {e}")
 
-        if state == "ongoing":
+            # ✅ Najdeme hráče s nejvyšším capitalResourcesLooted
+            best_player = max(
+                capital_data.get("members", []),
+                key=lambda m: m.get("capitalResourcesLooted", 0),
+                default=None
+            )
+
+            if best_player and best_player.get("capitalResourcesLooted", 0) > 0:
+                name = best_player.get("name", "Neznámý hráč")
+                gold = best_player.get("capitalResourcesLooted", 0)
+                mention = f"@{name}"
+                channel = self.bot.get_channel(self.announcement_channel_id)
+                if channel:
+                    try:
+                        await channel.send(
+                            f"{mention}\nza nejlepší výsledek v clan capital s {gold:,} {EVENT_EMOJIS.get('Capital Gold', '💰')}"
+                        )
+                        print(f"🏅 [clan_capital] Pochvala odeslána pro {name} s {gold} goldy.")
+                    except Exception as e:
+                        print(f"❌ [clan_capital] Chyba při posílání pochvaly: {e}")
+                else:
+                    print("❌ [clan_capital] Pochvalový kanál nenalezen.")
+            else:
+                print("⚠️ [clan_capital] Nebyl nalezen vhodný hráč k pochvale.")
+
+        elif state == "ongoing":
+            # Reset stavů
+            self._has_announced_end = False
             embed = self._create_capital_embed(state, capital_data)
             await self.update_capital_message(embed)
-
-        elif state == "ended" and self.current_capital_message_id:
-            embed = self._create_capital_embed(state, capital_data)
-            await self.update_capital_message(embed)
-            self.current_capital_message_id = None
-            save_room_id("capital_status_message", None)
 
         else:
-            print("ℹ️ [clan_capital] Stav 'ended' ale žádná zpráva k úpravě neexistuje – neprovádím nic.")
+            print("ℹ️ [clan_capital] Stav 'ended' – embed se již dál nemění.")
+
+        self._last_state = state
 
     async def update_capital_message(self, embed: discord.Embed):
         """
