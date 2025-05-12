@@ -157,8 +157,12 @@ class ClanWarHandler:
                 for i in range(0, len(mentions), 5):
                     await war_end_channel.send(" ".join(mentions[i:i + 5]))
 
-        # Aktualizuj uložený stav až po kontrole
-        print(f"✅ [clan_war] Aktuální stav války: {state} minulý stav {self._last_state}")
+        # Reset událostí, pokud válka začala znovu
+        if self._last_state == 'warEnded' and state == 'preparation':
+            print("🔁 [clan_war] Detekována nová válka – resetuji pořadí útoků.")
+            self.last_processed_order = 0
+            save_room_id("last_war_event_order", 0)
+
         self._last_state = state
 
         # Pokud není ve válce nebo přípravě, nedělej nic dalšího
