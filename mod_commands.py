@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.utils import get
 from datetime import datetime, timedelta
 
-from database import remove_warning, list_warnings, add_warning
+from database import remove_warning, add_warning, fetch_warnings
 
 
 async def setup_mod_commands(bot):
@@ -159,13 +159,39 @@ async def setup_mod_commands(bot):
         add_warning(coc_tag, date_time, reason, bot)
         await interaction.response.send_message(f"✅ Varování přidáno pro {coc_tag}.", ephemeral=True)
 
-    @bot.tree.command(name="list_warnings", description="Vypíše všechna varování v konzoli", guild=bot.guild_object)
+    @bot.tree.command(
+        name="list_warnings",
+        description="Vypíše všechna varování (jen pro tebe)",
+        guild=bot.guild_object,
+    )
     async def list_warnings_cmd(interaction: discord.Interaction):
+        # kontrola práv
         if not interaction.user.guild_permissions.moderate_members:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Tento příkaz může použít pouze moderátor.", ephemeral=True
+            )
             return
-        list_warnings()
-        await interaction.response.send_message("📋 Varování byla vypsána do konzole.", ephemeral=True)
+
+        # defer – dá nám víc než 3 s na odpověď
+        await interaction.response.defer(ephemeral=True)
+
+        rows = fetch_warnings()
+
+        if not rows:
+            await interaction.followup.send("😊 Nenalezeno žádné varování.", ephemeral=True)
+            return
+
+        # sestavíme text + chunkujeme pod 2000 znaků
+        header = "🔶 **Seznam varování**\n"
+        lines = [f"{i}. {tag} {dt} {reason}"
+                 for i, (tag, dt, reason) in enumerate(rows, 1)]
+        msg = header + "\n".join(lines)
+
+        for start in range(0, len(msg), 1990):  # 1 990 = malá rezerva
+            await interaction.followup.send(
+                msg[start: start + 1990], ephemeral=True
+            )
+
 
     @bot.tree.command(name="remove_warning", description="Odstraní konkrétní varování", guild=bot.guild_object)
     @app_commands.describe(

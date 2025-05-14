@@ -289,23 +289,12 @@ def add_warning(coc_tag: str, date_time: str = None, reason: str = "Bez udaného
         print(f"⚠️ [warning] Chybí bot pro potvrzení varování, nic nebylo odesláno.")
 
 # === Funkce pro výpis varování ===
-def list_warnings():
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("SELECT coc_tag, date_time, reason FROM clan_warnings")
-            rows = c.fetchall()
-
-            if not rows:
-                print("😊 [warnings] Nenalezeno žádné varování.")
-                return
-
-            print("\n=== 🔶 Seznam varování ===")
-            for i, (tag, dt, reason) in enumerate(rows, 1):
-                print(f"{i}. {tag} – {dt} – Důvod: {reason}")
-
-    except Exception as e:
-        print(f"❌ [database] Chyba při čtení varování: {e}")
+def fetch_warnings():
+    """Vrátí list[(tag, date_time, reason)] seřazený jak je v DB."""
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT coc_tag, date_time, reason FROM clan_warnings")
+        return c.fetchall()
 
 # === Funkce pro odstranění varování ===
 def remove_warning(coc_tag: str, date_time: str, reason: str):
