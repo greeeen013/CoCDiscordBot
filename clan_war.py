@@ -59,61 +59,115 @@ class ClanWarHandler:
         self.current_war_message_id = load_room_id("war_status_message")
         self._last_state = None
 
-    async def remind_missing_attacks(self, war_data: dict):
+    async def remind_missing_attacks(self, war_data: dict, send_warning: bool = True) -> Optional[str]:
         """
         Odešle upozornění do vybraného kanálu, pokud zbývá 6h, 2h nebo 1h do konce války
         a někteří hráči ještě neodehráli ani jeden útok. Každé upozornění se odešle jen jednou.
+        Navíc vrací zprávu s aktuálním zbývajícím časem do konce války a seznamem hráčů bez útoku.
         """
         end_time = self._parse_coc_time(war_data.get('endTime', ''))
         if not end_time:
-            return
+            return None  # Pokud není k dispozici čas konce války, funkce vrací None
 
         now = datetime.now(timezone.utc)
-        remaining_hours = (end_time - now).total_seconds() / 3600
+        remaining_seconds = (end_time - now).total_seconds()
+        remaining_hours = remaining_seconds / 3600
         hour_marks = [6, 2, 1]
 
-        for mark in hour_marks:
-            key = f"war_reminder_{mark}h"
-            already_sent = load_room_id(key)
+        # Seznam členů klanu, kteří zatím neútočili
+        missing_members = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
 
-            if remaining_hours <= mark and not already_sent:
-                missing = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
-                if not missing:
-                    save_room_id(key, True)
-                    continue
-
-                ping_channel = self.bot.get_channel(self.war_ping_channel_id)
-                mention = "<@317724566426222592>"
-
-                mentions = []
-                for m in missing:
-                    tag = m.get("tag")
-                    name = m.get("name", "Unknown").replace('_', r'\_').replace('*', r'\*')
-                    discord_mention = await self._get_discord_mention(tag)
-                    if discord_mention:
-                        mentions.append(discord_mention)
-                    else:
-                        mentions.append(f"@{name}")
-
-                # Zpráva podle urgency
-                if mark == 1:
-                    await ping_channel.send(f"{mention} ⚠️ **POSLEDNÍ VAROVÁNÍ – méně než 1 hodina do konce!**")
+        # Pomocná funkce pro formátování zbývajícího času (hodiny a minuty)
+        def format_remaining_time(seconds: float) -> str:
+            if seconds < 0:
+                seconds = 0
+            total_minutes = int(seconds // 60)
+            hours = total_minutes // 60
+            minutes = total_minutes % 60
+            def format_hours(h: int) -> str:
+                if h == 1:
+                    return "1 hodina"
+                elif 2 <= h <= 4:
+                    return f"{h} hodiny"
                 else:
-                    await ping_channel.send(f"{mention} Připomínka: zbývá méně než {mark}h do konce války")
+                    return f"{h} hodin"
+            def format_minutes(m: int) -> str:
+                if m == 1:
+                    return "1 minuta"
+                elif 2 <= m <= 4:
+                    return f"{m} minuty"
+                else:
+                    return f"{m} minut"
+            if hours > 0 and minutes > 0:
+                return f"{format_hours(hours)} {format_minutes(minutes)}"
+            elif hours > 0 and minutes == 0:
+                return f"{format_hours(hours)}"
+            else:
+                # Pokud zbývají méně než 1 hodina, vrátí pouze minuty
+                return f"{format_minutes(minutes)}"
 
-                for i in range(0, len(mentions), 5):
-                    await ping_channel.send(" ".join(mentions[i:i + 5]))
+        # Pokud je povoleno zasílat varování (automatické připomínky ve stanovených intervalech)
+        if send_warning:
+            for mark in hour_marks:
+                key = f"war_reminder_{mark}h"
+                already_sent = load_room_id(key)
+                if remaining_hours <= mark and not already_sent:
+                    if not missing_members:
+                        save_room_id(key, True)
+                        continue
+                    ping_channel = self.bot.get_channel(self.war_ping_channel_id)
+                    mention = "<@317724566426222592>"
 
-                # === Veřejné označení hráčů, kteří ještě neútočili ===
-                public_channel = self.bot.get_channel(1371199158060585030)
-                if public_channel:
-                    for m in missing:
+                    # Připravit seznam zmínek hráčů, kteří neútočili
+                    mentions_list = []
+                    for m in missing_members:
                         tag = m.get("tag")
+                        name = m.get("name", "Unknown").replace('_', r'\_').replace('*', r'\*')
                         discord_mention = await self._get_discord_mention(tag)
                         if discord_mention:
-                            await public_channel.send(f"{discord_mention} ⚠️ Připomínka: ještě jsi neodehrál válku.")
+                            mentions_list.append(discord_mention)
+                        else:
+                            mentions_list.append(f"@{name}")
 
-                save_room_id(key, True)
+                    # Text upozornění s dynamickým časem do konce války
+                    time_str = format_remaining_time((end_time - datetime.now(timezone.utc)).total_seconds())
+                    if mark == 1:
+                        await ping_channel.send(f"{mention} ⚠️ **POSLEDNÍ VAROVÁNÍ – zbývá {time_str} do konce!**")
+                    else:
+                        await ping_channel.send(f"{mention} Připomínka: zbývá {time_str} do konce války")
+
+                    # Odeslat zmínky po skupinách (max 5 v jedné zprávě) – přidána mezera i na konci poslední skupiny
+                    for i in range(0, len(mentions_list), 5):
+                        await ping_channel.send(" ".join(mentions_list[i:i+5]) + " ")
+
+                    # Veřejné označení hráčů, kteří ještě neútočili (pouze pokud mají propojený Discord účet)
+                    public_channel = self.bot.get_channel(1371199158060585030)
+                    if public_channel:
+                        for m in missing_members:
+                            tag = m.get("tag")
+                            discord_mention = await self._get_discord_mention(tag)
+                            if discord_mention:
+                                await public_channel.send(f"{discord_mention} ⚠️ Připomínka: ještě jsi neodehrál válku.")
+
+                    save_room_id(key, True)
+
+        # Sestavení výstupní zprávy pro vrácení (zbývající čas + výpis hráčů bez útoku)
+        time_remaining_str = format_remaining_time(remaining_seconds)
+        if not missing_members:
+            # Pokud nikdo nechybí (všichni odehráli)
+            return f"Do konce války zbývá {time_remaining_str}. ✅ Všichni členové klanu již provedli své útoky."
+        else:
+            # Vypsat hráče, kteří neútočili, oddělené mezerami (za každým jménem včetně posledního je mezera)
+            mentions_output = []
+            for m in missing_members:
+                tag = m.get("tag")
+                name = m.get("name", "Unknown").replace('_', r'\_').replace('*', r'\*')
+                discord_mention = await self._get_discord_mention(tag)
+                if discord_mention:
+                    mentions_output.append(discord_mention)
+                else:
+                    mentions_output.append(f"@{name}")
+            return f"Do konce války zbývá {time_remaining_str}. Útok dosud neprovedli: " + " ".join(mentions_output) + " "
 
     async def process_war_data(self, war_data: dict):
         """Zpracuje data o válce a aktualizuje Discord"""
