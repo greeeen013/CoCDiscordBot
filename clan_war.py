@@ -124,7 +124,7 @@ class ClanWarHandler:
         state = war_data.get('state', 'unknown')
 
         # Pokud se stav změnil na warEnded mělo by proběhnout jen 1x
-        if state == 'warEnded' and self._last_state != 'warEnded':
+        if state == "warEnded" and self._last_state and self._last_state != "warEnded":
             # pokud chceme smazat mistnost tak odkomentujeme funkci
             #await self._clear_war_channels()
             self.current_war_message_id = None
