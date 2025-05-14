@@ -18,6 +18,13 @@ TOWN_HALL_EMOJIS = {
     10: "<:town_hall_10:1365445393680437369>",
 }
 
+STATE_MAP = {
+    "inWar": "Probíhá",
+    "preparation": "Příprava",
+    "warEnded": "Ukončeno",
+    "notInWar": "Žádná válka"
+}
+
 # === Sdílené ID úložiště ===
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
@@ -285,7 +292,7 @@ class ClanWarHandler:
         """Vytvoří embed se stavem války s dynamickým rozdělením hráčů na víc fieldů podle limitu 1024 znaků."""
         clan = war_data.get('clan', {})
         opponent = war_data.get('opponent', {})
-        state = war_data.get('state', 'unknown').capitalize()
+        state = war_data.get('state', 'unknown')
 
         embed = discord.Embed(
             title=f"Clan War: {clan.get('name', 'Náš klan')} vs {opponent.get('name', 'Protivník')}",
@@ -328,7 +335,7 @@ class ClanWarHandler:
                 )
 
         # Hráči – dynamické dělení na více fieldů
-        if war_data.get('state') in ('inWar', 'preparation'):
+        if war_data.get('state') in ('inWar', 'preparation', 'warEnded'):
             def format_members(members):
                 formatted = []
                 for idx, m in enumerate(sorted(members, key=lambda x: x.get('mapPosition', 0)), start=1):
@@ -386,7 +393,8 @@ class ClanWarHandler:
                     embed.add_field(name=" ", value=" ", inline=True)
                     embed.add_field(name=f"**Jejich hráči**", value=their_value, inline=True)
 
-        embed.set_footer(text=f"Stav války: {state}")
+        friendly_state = STATE_MAP.get(state, state)
+        embed.set_footer(text=f"Stav války: {friendly_state}")
         return embed
 
     async def process_war_events(self, war_data: dict):
