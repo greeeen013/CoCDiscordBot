@@ -3,6 +3,8 @@ from discord import app_commands
 from discord.utils import get
 from datetime import datetime, timedelta
 
+from api_handler import fetch_current_war
+from clan_war import ClanWarHandler
 from database import remove_warning, add_warning, fetch_warnings
 
 
@@ -145,7 +147,7 @@ async def setup_mod_commands(bot):
         else:
             await interaction.response.send_message(f"✅ Slowmode nastaven na {sekundy} sekund.")
 
-    @bot.tree.command(name="add_warning", description="Přidá varování hráči podle CoC tagu", guild=bot.guild_object)
+    @bot.tree.command(name="pridej_varovani", description="Přidá varování hráči podle CoC tagu", guild=bot.guild_object)
     @app_commands.describe(
         coc_tag="Clash of Clans tag hráče",
         date_time="Datum a čas (DD/MM/YYYY HH:MM)",
@@ -160,7 +162,7 @@ async def setup_mod_commands(bot):
         await interaction.response.send_message(f"✅ Varování přidáno pro {coc_tag}.", ephemeral=True)
 
     @bot.tree.command(
-        name="list_warnings",
+        name="vypis_varovani",
         description="Vypíše všechna varování (jen pro tebe)",
         guild=bot.guild_object,
     )
@@ -193,7 +195,7 @@ async def setup_mod_commands(bot):
             )
 
 
-    @bot.tree.command(name="remove_warning", description="Odstraní konkrétní varování", guild=bot.guild_object)
+    @bot.tree.command(name="odeber_varovani", description="Odstraní konkrétní varování (musí to být 1:1 napsané", guild=bot.guild_object)
     @app_commands.describe(
         coc_tag="Tag hráče",
         date_time="Datum a čas varování (DD/MM/YYYY HH:MM)",
@@ -205,3 +207,84 @@ async def setup_mod_commands(bot):
             return
         remove_warning(coc_tag, date_time, reason)
         await interaction.response.send_message("🗑️ Varování odstraněno (pokud existovalo).", ephemeral=True)
+
+    @bot.tree.command(
+        name="kdo_neodehral",
+        description="Vypíše hráče, kteří dosud neodehráli útok ve válce",
+        guild=bot.guild_object
+    )
+    async def kdo_neodehral(interaction: discord.Interaction):
+        # ✅ 1) kontrola oprávnění
+        if not interaction.user.guild_permissions.manage_messages:
+            await interaction.response.send_message(
+                "❌ Tento příkaz může použít pouze moderátor.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        # ✅ 2) zajištění *jedné* sdílené instance ClanWarHandler
+        clan_war_handler = getattr(bot, "clan_war_handler", None)
+        if clan_war_handler is None:
+            clan_war_handler = ClanWarHandler(bot, bot.config)
+            bot.clan_war_handler = clan_war_handler
+
+        # ✅ 3) načtení aktuálního stavu války
+        war_data = await fetch_current_war(bot.clan_tag, bot.config)
+        if not war_data or war_data.get("state") is None:
+            await interaction.followup.send(
+                "❌ Nepodařilo se získat data o aktuální klanové válce.",
+                ephemeral=True
+            )
+            return
+
+        state = war_data["state"]
+
+        # ✅ 4) větvení podle stavu války
+        if state == "notInWar":
+            await interaction.followup.send(
+                "⚔️ Momentálně neprobíhá žádná klanová válka.",
+                ephemeral=True
+            )
+            return
+
+        if state == "preparation":
+            await interaction.followup.send(
+                "🛡️ Válka je ve fázi přípravy. Útoky zatím nelze provádět.",
+                ephemeral=True
+            )
+            return
+
+        if state == "warEnded":
+            missing = [
+                m for m in war_data["clan"]["members"]
+                if not m.get("attacks")
+            ]
+            if not missing:
+                await interaction.followup.send(
+                    "🏁 Válka již skončila. Všichni členové klanu provedli své útoky.",
+                    ephemeral=True
+                )
+                return
+
+            # seznam jmen/mentionů s mezerou i za posledním
+            names = []
+            for m in missing:
+                tag = m["tag"]
+                name = m["name"].replace('_', r'\_').replace('*', r'\*')
+                mention = await clan_war_handler._get_discord_mention(tag)
+                names.append(mention if mention else f"@{name}")
+            msg = "🏁 Válka již skončila. Útok neprovedli: " + " ".join(names) + " "
+            await interaction.followup.send(msg, ephemeral=True)
+            return
+
+        # state == "inWar"
+        result = await clan_war_handler.remind_missing_attacks(
+            war_data,
+            send_warning=False  # jen vrátí text, nic nepingá
+        )
+        await interaction.followup.send(
+            result or "❌ Nelze získat informace o válce.",
+            ephemeral=True
+        )
