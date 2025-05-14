@@ -335,20 +335,11 @@ class WarningReviewView(View):
                     INSERT INTO clan_warnings (coc_tag, date_time, reason, notified_at)
                     VALUES (?, ?, ?, NULL)
                 """, (self.coc_tag, self.date_time, self.reason))
-
-                # Zkusit najít propojeného hráče
-                c.execute("""
-                    SELECT discord_name 
-                    FROM coc_discord_links 
-                    WHERE coc_tag = ?
-                """, (self.coc_tag,))
-                link_row = c.fetchone()
-
                 conn.commit()
 
             await interaction.message.delete()
 
-            # Základní řádky zprávy
+            # Sestav základní zprávu
             tag_line = f"**{self.coc_tag}**"
             if self.member_name:
                 tag_line += f" ({self.member_name})"
@@ -359,23 +350,26 @@ class WarningReviewView(View):
                 f"📝 {self.reason}"
             )
 
-            row = c.fetchone()
-            if row:
-                discord_id = int(row[0])
-                user = await interaction.client.fetch_user(discord_id)
-                if user:
-                    try:
-                        await user.send(
-                            f"⚠️ Dostal jsi varování ⚠️.\n"
-                            f"👤 Clash of Clans tag: `{self.coc_tag}` ({self.member_name})\n"
-                            f"📆 {self.date_time}\n"
-                            f"📝 Důvod: {self.reason}"
-                        )
-                        msg += f"\n📩 Hráč je na Discordu, DM zpráva byla odeslána."
-                    except Exception as dm_error:
-                        msg += f"\n⚠️ Nepodařilo se odeslat DM zprávu hráči."
-                        print(f"⚠️ [confirm] DM error: {dm_error}")
+            # Použij get_all_links() místo SQL dotazu
+            all_links = get_all_links()
+            for discord_id, (tag, _) in all_links.items():
+                if tag.upper() == self.coc_tag.upper():
+                    user = await interaction.client.fetch_user(discord_id)
+                    if user:
+                        try:
+                            await user.send(
+                                f"⚠️ Dostal jsi varování ⚠️.\n"
+                                f"👤 Clash of Clans tag: `{self.coc_tag}` ({self.member_name})\n"
+                                f"📆 {self.date_time}\n"
+                                f"📝 Důvod: {self.reason}"
+                            )
+                            msg += "\n📩 Hráč je na Discordu, DM zpráva byla odeslána."
+                        except Exception as dm_error:
+                            msg += "\n⚠️ Nepodařilo se odeslat DM zprávu hráči."
+                            print(f"⚠️ [confirm] DM error: {dm_error}")
+                    break  # už jsme našli odpovídající tag
 
+            # Pošleme log zprávu
             log_channel = interaction.channel
             await log_channel.send(msg)
 
