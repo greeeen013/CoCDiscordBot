@@ -131,8 +131,9 @@ class ClanCapitalHandler:
         elif state != self._last_state:
             print(f"🔁 [clan_capital] Stav se změnil z {self._last_state} -> {state}")
 
-            # První zjištění 'ended'
-        if state == "ended" and not self._has_announced_end:
+        # --- oznámení o skončení -------------------------------------------
+        # Proběhne jen pokud máme předchozí stav (není None) a ještě nebyl announcment
+        if state == "ended" and self._last_state and not self._has_announced_end:
             self._has_announced_end = True
 
             # ✅ Upravíme embed zprávu naposledy – jen změníme footer na 'Stav: ended'
