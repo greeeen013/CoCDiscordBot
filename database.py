@@ -265,29 +265,6 @@ def get_all_members():
 
     return members
 
-# === Funkce pro přidání varování ===
-# === Přidání varování ===
-def add_warning(coc_tag: str, date_time: str = None, reason: str = "Bez udaného důvodu", bot: discord.Client = None):
-    if not coc_tag.startswith("#"):
-        coc_tag = f"#{coc_tag}"
-
-    if date_time:
-        try:
-            datetime.strptime(date_time, "%d/%m/%Y %H:%M")
-        except ValueError:
-            print(f"⚠️ [warning] Neplatný formát času: {date_time} – očekáváno ve formátu DD/MM/YYYY HH:MM. Vygenerován automaticky.")
-            date_time = datetime.now().strftime("%d/%m/%Y %H:%M")
-    else:
-        date_time = datetime.now().strftime("%d/%m/%Y %H:%M")
-
-    if bot:
-        import asyncio
-        asyncio.create_task(notify_single_warning(bot, coc_tag, date_time, reason))
-        notify_warnings_exceed(bot)
-        print(f"📝 [warning] Návrh varování pro {coc_tag} připraven a odeslán k potvrzení.")
-    else:
-        print(f"⚠️ [warning] Chybí bot pro potvrzení varování, nic nebylo odesláno.")
-
 # === Funkce pro výpis varování ===
 def fetch_warnings():
     """Vrátí list[(tag, date_time, reason)] seřazený jak je v DB."""
@@ -332,35 +309,79 @@ async def cleanup_old_warnings():
         print(f"❌ [cleanup] Chyba při čištění varování: {e}")
 
 # === Poslání varování jako zprávu na Discord ===
-# === Poslání varování jako zprávu na Discord ===
 class WarningReviewView(View):
-    def __init__(self, coc_tag: str, date_time: str, reason: str):
+    def __init__(self, coc_tag: str, coc_name: str, date_time: str, reason: str):
         super().__init__(timeout=None)
         self.coc_tag = coc_tag
+        self.member_name = coc_name
         self.date_time = date_time
         self.reason = reason
 
     @discord.ui.button(label="✅ Potvrdit", style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, button: Button):
         try:
+            # Získání jména z clan_members
+            member_name = None
+            all_members = get_all_members()
+            for member in all_members:
+                if member["tag"].upper() == self.coc_tag.upper():
+                    member_name = member["name"]
+                    break
+
+            # Uložení varování
             with sqlite3.connect(DB_PATH) as conn:
                 c = conn.cursor()
                 c.execute("""
                     INSERT INTO clan_warnings (coc_tag, date_time, reason, notified_at)
                     VALUES (?, ?, ?, NULL)
                 """, (self.coc_tag, self.date_time, self.reason))
+
+                # Zkusit najít propojeného hráče
+                c.execute("""
+                    SELECT discord_name 
+                    FROM coc_discord_links 
+                    WHERE coc_tag = ?
+                """, (self.coc_tag,))
+                link_row = c.fetchone()
+
                 conn.commit()
 
             await interaction.message.delete()
 
-            log_channel = interaction.channel  # nebo pevně daný logovací kanál
-            await log_channel.send(
-                f"✅ {interaction.user.mention} potvrdil varování pro **{self.coc_tag}**\n"
-                f"📆 {self.date_time}\n📝 {self.reason}"
+            # Základní řádky zprávy
+            tag_line = f"**{self.coc_tag}**"
+            if self.member_name:
+                tag_line += f" ({self.member_name})"
+
+            msg = (
+                f"✅ {interaction.user.mention} potvrdil varování pro {tag_line}\n"
+                f"📆 {self.date_time}\n"
+                f"📝 {self.reason}"
             )
 
+            row = c.fetchone()
+            if row:
+                discord_id = int(row[0])
+                user = await interaction.client.fetch_user(discord_id)
+                if user:
+                    try:
+                        await user.send(
+                            f"⚠️ Dostal jsi varování ⚠️.\n"
+                            f"👤 Clash of Clans tag: `{self.coc_tag}` ({self.member_name})\n"
+                            f"📆 {self.date_time}\n"
+                            f"📝 Důvod: {self.reason}"
+                        )
+                        msg += f"\n📩 Hráč je na Discordu, DM zpráva byla odeslána."
+                    except Exception as dm_error:
+                        msg += f"\n⚠️ Nepodařilo se odeslat DM zprávu hráči."
+                        print(f"⚠️ [confirm] DM error: {dm_error}")
+
+            log_channel = interaction.channel
+            await log_channel.send(msg)
+
             print(
-                f"✅ [review] {interaction.user.name} ({interaction.user.id}) potvrdil varování: {self.coc_tag} – {self.reason}")
+                f"✅ [review] {interaction.user.name} ({interaction.user.id}) potvrdil varování: {self.coc_tag} – {self.reason}"
+            )
 
         except Exception as e:
             await interaction.followup.send(
@@ -456,7 +477,7 @@ async def notify_single_warning(bot: discord.Client, coc_tag: str, date_time: st
         channel = bot.get_channel(1371105995270393867)
         if channel:
             msg = f"{coc_tag}\n@{name}\n{date_time}\n{reason}"
-            view = WarningReviewView(coc_tag, date_time, reason)
+            view = WarningReviewView(coc_tag, name, date_time, reason)
             await channel.send(msg, view=view)
             print(f"📣 [notify] Návrh na varování odeslán pro {coc_tag}.")
     except Exception as e:
