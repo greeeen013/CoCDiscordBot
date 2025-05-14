@@ -5,7 +5,7 @@ from typing import Optional
 import json
 import os
 
-from database import notify_single_warning
+from database import notify_single_warning, get_all_links
 
 TOWN_HALL_EMOJIS = {
     17: "<:town_hall_17:1365445408096129165>",
@@ -147,14 +147,21 @@ class ClanWarHandler:
                     for i in range(0, len(mentions_list), 5):
                         await ping_channel.send(" ".join(mentions_list[i:i+5]) + " ")
 
-                    # Veřejné označení hráčů, kteří ještě neútočili (pouze pokud mají propojený Discord účet)
-                    public_channel = self.bot.get_channel(1371199158060585030)
-                    if public_channel:
-                        for m in missing_members:
-                            tag = m.get("tag")
-                            discord_mention = await self._get_discord_mention(tag)
-                            if discord_mention:
-                                await public_channel.send(f"{discord_mention} ⚠️ Připomínka: ještě jsi neodehrál válku.")
+                    # Soukromá připomínka hráčům přes DM (pokud mají propojený Discord účet)
+                    all_links = get_all_links()
+                    for discord_id, (linked_tag, _) in all_links.items():
+                        if linked_tag.upper() == tag.upper():
+                            try:
+                                user = await self.bot.fetch_user(discord_id)
+                                if user:
+                                    await user.send(
+                                        f"⚔️ Připomínka: zbývá {time_str} do konce clan war!\n"
+                                        f"Ještě jsi **neodehrál** žádný útok za svůj účet: `{tag}`.\n"
+                                        f"Nezapomeň prosím odehrát, ať neztrácíme hvězdy 🙏"
+                                    )
+                            except Exception as dm_error:
+                                print(f"⚠️ [remind] Nepodařilo se odeslat DM hráči s tagem {tag}: {dm_error}")
+                            break  # už jsme poslali DM tomu, kdo odpovídá tagu
 
                     save_room_id(key, True)
 
