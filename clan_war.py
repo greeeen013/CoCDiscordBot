@@ -7,16 +7,7 @@ import os
 
 from database import notify_single_warning, get_all_links
 
-TOWN_HALL_EMOJIS = {
-    17: "<:town_hall_17:1365445408096129165>",
-    16: "<:town_hall_16:1365445406854615143>",
-    15: "<:town_hall_15:1365445404467925032>",
-    14: "<:town_hall_14:1365445402463043664>",
-    13: "<:town_hall_13:1365445400177147925>",
-    12: "<:town_hall_12:1365445398411477082>",
-    11: "<:town_hall_11:1365445395173347458>",
-    10: "<:town_hall_10:1365445393680437369>",
-}
+from discord_bot import TOWN_HALL_EMOJIS
 
 STATE_MAP = {
     "inWar": "Probíhá",
@@ -161,7 +152,7 @@ class ClanWarHandler:
                                     )
                             except Exception as dm_error:
                                 print(f"⚠️ [remind] Nepodařilo se odeslat DM hráči s tagem {tag}: {dm_error}")
-                            break  # už jsme poslali DM tomu, kdo odpovídá tagu
+                            break
 
                     save_room_id(key, True)
 

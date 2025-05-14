@@ -11,15 +11,17 @@ from mod_commands import setup_mod_commands # Import funkcí pro nastavení mode
 
 VERIFICATION_PATH = "verification_data.json" # Definování konstanty s cestou k souboru, kde se ukládá info o zprávě pro verifikaci
 TOWN_HALL_EMOJIS = {
-    17: "<:town_hall_17:1365445408096129165>",
-    16: "<:town_hall_16:1365445406854615143>",
-    15: "<:town_hall_15:1365445404467925032>",
-    14: "<:town_hall_14:1365445402463043664>",
-    13: "<:town_hall_13:1365445400177147925>",
-    12: "<:town_hall_12:1365445398411477082>",
-    11: "<:town_hall_11:1365445395173347458>",
-    10: "<:town_hall_10:1365445393680437369>",
-    # atd...
+    17: "<:town_hall_17:1372327905882935467>",
+    16: "<:town_hall_16:1372327703264497745>",
+    15: "<:town_hall_15:1372327513975427183>",
+    14: "<:town_hall_14:1372327272979103896>",
+    13: "<:town_hall_13:1372259972053991434>",
+    12: "<:town_hall_12:1372259837391405076>",
+    11: "<:town_hall_11:1372259715840606449>",
+    10: "<:town_hall_10:1372259547825307741>",
+    9: "<:town_hall_9:1372259396842946671>",
+    8: "<:town_hall_8:1372259356376170588>",
+    7: "<:town_hall_7:1372259219302121522>"
 } # Definování emoji pro jednotlivé úrovně Town Hall (TH) v Clash of Clans
 LEAGUES = {
     "Bronze League": "<:league_bronze:1365740648820637807>",
