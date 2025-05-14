@@ -4,8 +4,7 @@ from typing import Optional
 from database import get_all_members, get_all_links
 from role_giver import update_roles
 from verification import start_verification_permission
-
-from discord_bot import TOWN_HALL_EMOJIS
+from constants import TOWN_HALL_EMOJIS
 
 HEROES_EMOJIS = {
     "Barbarian King": "<:barbarian_king:1371137125818568764>",

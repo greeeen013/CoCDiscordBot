@@ -6,8 +6,7 @@ import json
 import os
 
 from database import notify_single_warning, get_all_links
-
-from discord_bot import TOWN_HALL_EMOJIS
+from constants import TOWN_HALL_EMOJIS
 
 STATE_MAP = {
     "inWar": "Probíhá",
