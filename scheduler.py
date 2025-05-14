@@ -16,7 +16,11 @@ is_hourly_paused = False
 
 # === Funkce pro hodinové tahání dat ===
 async def hourly_clan_update(config: dict, bot):
-    clan_war_handler = ClanWarHandler(bot, config)
+    clan_war_handler = getattr(bot, "clan_war_handler", None)
+    if clan_war_handler is None:
+        clan_war_handler = ClanWarHandler(bot, config)
+        bot.clan_war_handler = clan_war_handler  # uložíme pro příště
+
     clan_capital_handler = ClanCapitalHandler(bot, config)
     while True:
         if not is_hourly_paused:
