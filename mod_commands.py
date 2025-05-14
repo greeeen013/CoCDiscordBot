@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from api_handler import fetch_current_war
 from clan_war import ClanWarHandler
-from database import remove_warning, add_warning, fetch_warnings
+from database import remove_warning, fetch_warnings, notify_single_warning
 
 
 async def setup_mod_commands(bot):
@@ -147,20 +147,53 @@ async def setup_mod_commands(bot):
         else:
             await interaction.response.send_message(f"✅ Slowmode nastaven na {sekundy} sekund.")
 
-    @bot.tree.command(name="pridej_varovani", description="Přidá varování hráči podle CoC tagu", guild=bot.guild_object)
+    @bot.tree.command(
+        name="pridej_varovani",
+        description="Navrhne varování pro hráče podle CoC tagu",
+        guild=bot.guild_object
+    )
     @app_commands.describe(
         coc_tag="Clash of Clans tag hráče",
         date_time="Datum a čas (DD/MM/YYYY HH:MM)",
         reason="Důvod varování"
     )
-    async def add_warning_cmd(interaction: discord.Interaction, coc_tag: str, date_time: str = None,
-                              reason: str = None):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
-            return
-        add_warning(coc_tag, date_time, reason, bot)
-        await interaction.response.send_message(f"✅ Varování přidáno pro {coc_tag}.", ephemeral=True)
+    async def pridej_varovani(
+            interaction: discord.Interaction,
+            coc_tag: str,
+            reason: str = "Bez udaného důvodu",
+            date_time: str | None = None
+    ):
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
+        if not coc_tag.startswith("#"):
+            coc_tag = f"#{coc_tag}"
+
+        if date_time:
+            try:
+                # Validuj ručně
+                datetime.strptime(date_time, "%d/%m/%Y %H:%M")
+            except ValueError:
+                await interaction.followup.send(
+                    "❌ Neplatný formát času. Použij formát `DD/MM/YYYY HH:MM`, např. `14/05/2025 18:30`.",
+                    ephemeral=True
+                )
+                return
+        else:
+            # Automaticky nastav aktuální čas
+            date_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+        try:
+            await notify_single_warning(interaction.client, coc_tag, date_time, reason)
+            await interaction.followup.send(
+                f"✅ Návrh varování pro {coc_tag} byl odeslán ke schválení.",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.followup.send(
+                f"❌ Chyba při vytváření varování: {e}",
+                ephemeral=True
+            )
+            print(f"❌ [slash/pridej_varovani] {e}")
     @bot.tree.command(
         name="vypis_varovani",
         description="Vypíše všechna varování (jen pro tebe)",
