@@ -67,7 +67,7 @@ def create_database():
         print(f"❌ [database] Chyba při vytváření databáze: {e}")
 
 # === Uloží nebo aktualizuje hráče ===
-def update_or_create_members(data: list[dict]):
+def update_or_create_members(data: list[dict], bot=None):
     """
     Pro každý záznam člena:
     - Pokud ještě neexistuje v databázi, přidá ho
@@ -159,13 +159,10 @@ def update_or_create_members(data: list[dict]):
                 c.execute("DELETE FROM clan_members WHERE tag = ?", (tag,))
                 print(f"🗑️ [database] Odebrán hráč s tagem {tag} – již není v klanu.")
 
-                # pošleme tag do fronty, aby se vyčistily role/propojení
-                try:
-                    from member_tracker import queue_clan_departure
-                    queue_clan_departure(tag)
-                except ImportError:
-                    # member_tracker ještě nemusí být načten – v nejhorším se nic nestane
-                    pass
+                # Spusť úklid jen pokud je `bot` k dispozici
+                if bot:
+                    from member_tracker import cleanup_after_coc_departure
+                    asyncio.create_task(cleanup_after_coc_departure(bot, tag))
 
     except Exception as e:
         print(f"❌ [database] Chyba při zápisu do databáze: {e}")
@@ -173,7 +170,7 @@ def update_or_create_members(data: list[dict]):
     conn.close()
 
 # === Hlavní řídící funkce pro práci s databází ===
-def process_clan_data(data: list[dict]):
+def process_clan_data(data: list[dict], bot=None):
     """
     Univerzální funkce pro zpracování dat z API:
     - Zkontroluje, zda existuje databáze
@@ -188,7 +185,7 @@ def process_clan_data(data: list[dict]):
         print("📁 Databáze neexistuje, bude vytvořena...")
         create_database()
 
-    update_or_create_members(data)
+    update_or_create_members(data, bot=bot)
 
 def get_all_links():
     """
