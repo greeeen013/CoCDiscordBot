@@ -92,7 +92,7 @@ def queue_clan_departure(tag: str):
     try:
         _leave_queue.put_nowait(tag.upper())
     except asyncio.QueueFull:
-        print(f"[member_tracker] ⚠️ Fronta plná, tag {tag} zahazuji.")
+        print(f"⚠️ [member_tracker] Fronta plná, tag {tag} zahazuji.")
 
 # --------------------------------------------------------
 # veřejný worker – vytáhne tag z fronty a zpracuje
@@ -104,7 +104,7 @@ async def cleanup_after_coc_departure(bot: discord.Client, coc_tag: str):
     coc_tag = coc_tag.upper()
     guild = getattr(bot, "guild_object", None)
     if not guild:
-        print("[cleanup] ❌ guild_object není nastaven.")
+        print("❌ [cleanup] guild_object není nastaven.")
         return
 
     links = get_all_links()
@@ -131,7 +131,7 @@ async def cleanup_after_coc_departure(bot: discord.Client, coc_tag: str):
             except discord.Forbidden:
                 pass
         except discord.Forbidden:
-            print(f"[cleanup] ⚠️ Nemám oprávnění upravit {member.display_name}")
+            print(f"⚠️ [cleanup] Nemám oprávnění upravit {member.display_name}")
 
     channel = guild.get_channel(CLAN_LEAVE_LOG_ID)
     if channel:
@@ -149,4 +149,4 @@ async def cleanup_after_coc_departure(bot: discord.Client, coc_tag: str):
         )
         await channel.send(embed=embed)
 
-    print(f"[cleanup] ✅ Úklid hotov pro {coc_tag} / <@{discord_id}>")
+    print(f"✅ [cleanup] Úklid hotov pro {coc_tag} / <@{discord_id}>")
