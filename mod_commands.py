@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from api_handler import fetch_current_war
 from clan_war import ClanWarHandler
-from database import remove_warning, fetch_warnings, notify_single_warning
+from database import remove_warning, fetch_warnings, notify_single_warning, get_all_links, remove_coc_link, add_coc_link
 
 
 async def setup_mod_commands(bot):
@@ -321,3 +321,165 @@ async def setup_mod_commands(bot):
             result or "❌ Nelze získat informace o válce.",
             ephemeral=True
         )
+
+        # ------------------------------------------------------------------
+        # /propoj_ucet  – přidá (nebo přepíše) propojení Discord ↔ CoC účtu
+        # ------------------------------------------------------------------
+
+    @bot.tree.command(
+        name="propoj_ucet",
+        description="Propojí zadaný Discord účet s Clash of Clans účtem a přiřadí roli.",
+        guild=bot.guild_object
+    )
+    @app_commands.describe(
+        uzivatel="Discord uživatel k propojení",
+        coc_tag="Clash of Clans tag (např. #ABC123)",
+        coc_name="Jméno v Clash of Clans"
+    )
+    async def propojit_ucet(
+            interaction: discord.Interaction,
+            uzivatel: discord.Member,
+            coc_tag: str,
+            coc_name: str
+    ):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ Tento příkaz může použít pouze administrátor.",
+                ephemeral=True
+            )
+            return
+
+        coc_tag = coc_tag.upper()
+        if not coc_tag.startswith("#"):
+            coc_tag = f"#{coc_tag}"
+
+        try:
+            add_coc_link(str(uzivatel.id), coc_tag, coc_name)
+
+            # ➕ Přiřazení role
+            role = interaction.guild.get_role(1365768439473373235)
+            if role:
+                try:
+                    await uzivatel.add_roles(role, reason="Propojení Clash of Clans účtu")
+                except discord.Forbidden:
+                    await interaction.followup.send(
+                        "⚠️ Nepodařilo se přiřadit roli – chybí oprávnění.",
+                        ephemeral=True
+                    )
+
+            await interaction.response.send_message(
+                f"✅ Účet **{coc_name}** ({coc_tag}) byl propojen s "
+                f"{uzivatel.mention} a byla mu přiřazena role.",
+                ephemeral=False
+            )
+
+            # DM uživateli (nevadí, když selže)
+            try:
+                await uzivatel.send(
+                    f"🔗 Tvůj Discord účet byl propojen s Clash of Clans účtem "
+                    f"**{coc_name}** (`{coc_tag}`). Byla ti také přidána role na serveru."
+                )
+            except Exception:
+                pass
+
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Nepodařilo se uložit propojení: {e}",
+                ephemeral=True
+            )
+
+    # ------------------------------------------------------------------
+    # /odpoj_ucet – odstraní propojení pro volajícího uživatele
+    # ------------------------------------------------------------------
+    @bot.tree.command(
+        name="odpoj_ucet",
+        description="Odpojí Clash of Clans účet od Discord uživatele a odebere roli.",
+        guild=bot.guild_object
+    )
+    @app_commands.describe(
+        uzivatel="Discord uživatel k odpojení (pokud vynecháš, odpojí tebe)"
+    )
+    async def odpoj_ucet(
+            interaction: discord.Interaction,
+            uzivatel: discord.Member | None = None
+    ):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ Tento příkaz může použít pouze administrátor.",
+                ephemeral=True
+            )
+            return
+
+        # Pokud parametr chybí, bereme volajícího
+        uzivatel = uzivatel or interaction.user
+
+        try:
+            remove_coc_link(str(uzivatel.id))
+
+            # ➖ Odebrání role
+            role = interaction.guild.get_role(1365768439473373235)
+            if role and role in uzivatel.roles:
+                try:
+                    await uzivatel.remove_roles(role, reason="Odpojení Clash of Clans účtu")
+                except discord.Forbidden:
+                    await interaction.followup.send(
+                        "⚠️ Nepodařilo se odebrat roli – chybí oprávnění.",
+                        ephemeral=True
+                    )
+
+            await interaction.response.send_message(
+                f"🗑️ Propojení bylo odstraněno a roli jsem odebral uživateli {uzivatel.mention}.",
+                ephemeral=False
+            )
+
+            # DM (opět jen best-effort)
+            try:
+                await uzivatel.send(
+                    "🔌 Tvé propojení s Clash of Clans účtem bylo zrušeno a role odebrána."
+                )
+            except Exception:
+                pass
+
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Nepodařilo se odpojit účet: {e}",
+                ephemeral=True
+            )
+
+    # ------------------------------------------------------------------
+    # /seznam_propojeni – vypíše všechna propojení (jen volajícímu)
+    # ------------------------------------------------------------------
+    @bot.tree.command(
+        name="seznam_propojeni",
+        description="Vypíše seznam všech Discord ↔ CoC propojení.",
+        guild=bot.guild_object
+    )
+    async def seznam_propojeni(interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ Tento příkaz může použít pouze administrátor.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            links = get_all_links()  # dict {discord_id: (coc_tag, coc_name)}
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Chyba při čtení databáze: {e}",
+                ephemeral=True
+            )
+            return
+
+        if not links:
+            await interaction.response.send_message(
+                "ℹ️ Zatím nejsou žádná propojení.",
+                ephemeral=True
+            )
+            return
+
+        lines = ["**Seznam propojených účtů:**"]
+        for discord_id, (tag, name) in links.items():
+            lines.append(f"- <@{discord_id}> → **{name}** (`{tag}`)")
+        # zpráva jen volajícímu, aby se zbytečně nespamovalo
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
