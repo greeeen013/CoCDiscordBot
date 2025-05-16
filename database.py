@@ -159,6 +159,14 @@ def update_or_create_members(data: list[dict]):
                 c.execute("DELETE FROM clan_members WHERE tag = ?", (tag,))
                 print(f"🗑️ [database] Odebrán hráč s tagem {tag} – již není v klanu.")
 
+                # pošleme tag do fronty, aby se vyčistily role/propojení
+                try:
+                    from member_tracker import queue_clan_departure
+                    queue_clan_departure(tag)
+                except ImportError:
+                    # member_tracker ještě nemusí být načten – v nejhorším se nic nestane
+                    pass
+
     except Exception as e:
         print(f"❌ [database] Chyba při zápisu do databáze: {e}")
 
