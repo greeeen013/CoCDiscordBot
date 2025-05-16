@@ -3,6 +3,7 @@ from datetime import datetime
 
 from api_handler import fetch_clan_members_list, fetch_player_data
 from database import process_clan_data, get_all_links, get_all_members, cleanup_old_warnings
+from member_tracker import discord_sync_members_once
 from role_giver import update_roles
 from api_handler import fetch_current_war, fetch_current_capital
 from clan_war import ClanWarHandler
@@ -26,6 +27,12 @@ async def hourly_clan_update(config: dict, bot):
         if not is_hourly_paused:
             print(f"🕒 [Scheduler] spouštím hourly_clan_update Aktuální datum a čas: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
+            # === Kontrola Discord uživatelů ===
+            try:
+                await discord_sync_members_once(bot)
+            except Exception as e:
+                print(f"[scheduler] ⚠️ member sync chyba: {e}")
+
             # === Načtení clanu ===
             guild = bot.get_guild(config["GUILD_ID"])
             if guild is None:
@@ -38,7 +45,7 @@ async def hourly_clan_update(config: dict, bot):
             data = await fetch_clan_members_list(config["CLAN_TAG"], config)
             if data:
                 print(f"✅ [Scheduler] Načteno {len(data.get('items', []))} členů klanu.")
-                process_clan_data(data.get("items", []))
+                process_clan_data(data.get("items", []), bot=bot)
 
             # === Aktualizace rolí ===
             print("🔄 [Scheduler] Spouštím automatickou aktualizaci rolí...")
