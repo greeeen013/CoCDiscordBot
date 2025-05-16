@@ -6,9 +6,10 @@ import discord
 from typing import Optional
 from discord.ext import commands
 
-from database import DB_PATH, remove_coc_link   # reuse existující logiku
+from database import DB_PATH, remove_coc_link, get_all_links  # reuse existující logiku
 
 LOG_CHANNEL_ID = 1371089891621998652
+CLAN_LEAVE_LOG_ID = 1365768783083339878
 
 # ~~~~~ Fronta tagů, kterým je třeba udělat "úklid" ~~~~~
 _leave_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=0)   # neomezená
@@ -93,52 +94,49 @@ def queue_clan_departure(tag: str):
     except asyncio.QueueFull:
         print(f"[member_tracker] ⚠️ Fronta plná, tag {tag} zahazuji.")
 
-
 # --------------------------------------------------------
-# interní funkce – dělá celý úklid pro jeden CoC tag
+# veřejný worker – vytáhne tag z fronty a zpracuje
 # --------------------------------------------------------
-async def _cleanup_for_tag(bot: discord.Client, guild: discord.Guild, tag: str):
-    # import až tady → vyhneme se cyklickému importu
-    from database import get_all_links, remove_coc_link
+async def cleanup_after_coc_departure(bot: discord.Client, coc_tag: str):
+    """
+    Spustí úklid pro uživatele s daným CoC tagem, pokud je ještě propojený.
+    """
+    coc_tag = coc_tag.upper()
+    guild = getattr(bot, "guild_object", None)
+    if not guild:
+        print("[cleanup] ❌ guild_object není nastaven.")
+        return
 
-    links = get_all_links()            # {discord_id: (coc_tag, coc_name)}
-    discord_id: Optional[int] = None
-    for d_id, (coc_tag, _) in links.items():
-        if coc_tag.upper() == tag:
+    links = get_all_links()
+    discord_id = None
+    for d_id, (tag, _) in links.items():
+        if tag.upper() == coc_tag:
             discord_id = d_id
             break
 
     if discord_id is None:
-        return  # nikdo na serveru k tomuto tagu – nic víc neděláme
+        return  # uživatel nemá propojení – nic dál
 
-    # 1) smaž propojení v DB
     remove_coc_link(str(discord_id))
 
-    # 2) pokus se najít člena na serveru
     member = guild.get_member(discord_id)
     if member:
         try:
-            # odeber všechny role kromě @everyone
             roles_to_remove = [r for r in member.roles if r != guild.default_role]
             if roles_to_remove:
-                await member.remove_roles(*roles_to_remove, reason="Odešel z CoC klanu")
+                await member.remove_roles(*roles_to_remove, reason="Opustil CoC klan")
 
-            # přejmenuj (ignoruj chybu oprávnění)
             try:
-                await member.edit(nick="Odešel z klanu", reason="Odešel z CoC klanu")
+                await member.edit(nick="Odešel z klanu", reason="Opustil CoC klan")
             except discord.Forbidden:
                 pass
         except discord.Forbidden:
-            print(f"[member_tracker] ⚠️ Nemám oprávnění upravit uživatele {discord_id}")
+            print(f"[cleanup] ⚠️ Nemám oprávnění upravit {member.display_name}")
 
-    # 3) log do kanálu
-    channel = guild.get_channel(1365768783083339878)
+    channel = guild.get_channel(CLAN_LEAVE_LOG_ID)
     if channel:
-        # vybereme hezké jméno / mention
-        name_or_mention = member.mention if member else f"<@{discord_id}>"
-
         embed = discord.Embed(
-            title=f"👋 Díky, že jsi s námi byl, {name_or_mention}!",
+            title=f"👋 Díky, že jsi s námi byl, <@{discord_id}>!",
             description=(
                 "(ne)budeš nám chybět 😉\n\n"
                 "🧹 Tvoje propojení s Clash of Clans bylo odstraněno\n"
@@ -149,28 +147,6 @@ async def _cleanup_for_tag(bot: discord.Client, guild: discord.Guild, tag: str):
         embed.set_footer(
             text="🎯 Rozmyslíš-li si to, dveře Czech Heroes jsou ti opět otevřené!"
         )
-
         await channel.send(embed=embed)
 
-    print(f"[member_tracker] Dokončen úklid pro tag {tag} / {discord_id}")
-
-
-# --------------------------------------------------------
-# veřejný worker – vytáhne tag z fronty a zpracuje
-# --------------------------------------------------------
-async def clan_departure_worker(bot: discord.Client):
-    """Běží v samostatné corutině – startuje jej scheduler."""
-    await bot.wait_until_ready()
-    guild = getattr(bot, "guild_object", None)
-    if guild is None:
-        print("[member_tracker] ❌ bot.guild_object není nastavené, worker se ukončí")
-        return
-
-    print("[member_tracker] 👟 Clan-departure worker spuštěn")
-    while not bot.is_closed():
-        tag = await _leave_queue.get()
-        try:
-            await _cleanup_for_tag(bot, guild, tag)
-        except Exception as e:
-            print(f"[member_tracker] ⚠️ Chyba při úklidu pro {tag}: {e}")
-        _leave_queue.task_done()
+    print(f"[cleanup] ✅ Úklid hotov pro {coc_tag} / <@{discord_id}>")
