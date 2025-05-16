@@ -240,9 +240,6 @@ class ClanWarHandler:
             save_room_id("last_war_event_order", 0)
             reset_war_reminder_flags()
 
-        if self._last_state is None:
-            reset_war_reminder_flags()
-
         self._last_state = state
 
         # Pokud není ve válce nebo přípravě, nedělej nic dalšího
