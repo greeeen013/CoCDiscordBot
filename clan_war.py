@@ -44,6 +44,24 @@ def save_room_id(key: str, message_id: Optional[int]):
     except Exception as e:
         print(f"❌ [discord_rooms_ids] Chyba při zápisu: {e}")
 
+def reset_war_reminder_flags():
+    """Smaže všechny klíče začínající na 'war_reminder_' z JSON souboru."""
+    try:
+        if os.path.exists(ROOM_IDS_PATH):
+            with open(ROOM_IDS_PATH, "r") as f:
+                data = json.load(f)
+
+            # Smažeme všechny klíče začínající na 'war_reminder_'
+            keys_to_remove = [key for key in data if key.startswith("war_reminder_")]
+            for key in keys_to_remove:
+                data.pop(key, None)
+
+            with open(ROOM_IDS_PATH, "w") as f:
+                json.dump(data, f)
+
+            print(f"♻️ [clan_war] Resetováno {len(keys_to_remove)} war reminder flagů.")
+    except Exception as e:
+        print(f"❌ [clan_war] Chyba při resetu war reminder flagů: {e}")
 
 class ClanWarHandler:
     def __init__(self, bot, config):
@@ -220,6 +238,10 @@ class ClanWarHandler:
             print("🔁 [clan_war] Detekována nová válka – resetuji pořadí útoků.")
             self.last_processed_order = 0
             save_room_id("last_war_event_order", 0)
+            reset_war_reminder_flags()
+
+        if self._last_state is None:
+            reset_war_reminder_flags()
 
         self._last_state = state
 
