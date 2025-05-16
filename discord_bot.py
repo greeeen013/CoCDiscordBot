@@ -51,11 +51,15 @@ class MyBot(commands.Bot):
     async def on_ready(self):
         print(f"✅🤖 Přihlášen jako {self.user}")
         self.add_view(VerifikacniView())
-        asyncio.create_task(hourly_clan_update(self.config, self))
 
-    async def on_ready(self):
-        print(f"✅🤖 Přihlášen jako {self.user}")
-        self.add_view(VerifikacniView())
+        # ⬇️ Připojíme reálný Guild objekt
+        self.guild_object = self.get_guild(self.config["GUILD_ID"])
+        if self.guild_object is None:
+            print(f"❌ [bot] Guild s ID {self.config['GUILD_ID']} nebyla nalezena.")
+        else:
+            print(f"✅ [bot] Připojen k serveru: {self.guild_object.name}")
+
+        # Spustíme plánovač
         asyncio.create_task(hourly_clan_update(self.config, self))
 
     async def on_message(self, message):
