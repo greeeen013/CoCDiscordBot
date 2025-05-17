@@ -20,14 +20,14 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
 
 def load_room_id(key: str):
-    if os.path.exists(ROOM_IDS_PATH):
-        try:
+    try:
+        if os.path.exists(ROOM_IDS_PATH):
             with open(ROOM_IDS_PATH, "r") as f:
-                data = json.load(f)
-                return data.get(key)
-        except Exception as e:
-            print(f"❌ [discord_rooms_ids] Chyba při čtení: {e}")
+                return json.load(f).get(key)
+    except Exception as e:
+        print(f"[discord_rooms_ids] Chyba při čtení: {e}")
     return None
+
 
 def save_room_id(key: str, message_id: Optional[int]):
     try:
@@ -42,7 +42,7 @@ def save_room_id(key: str, message_id: Optional[int]):
         with open(ROOM_IDS_PATH, "w") as f:
             json.dump(data, f)
     except Exception as e:
-        print(f"❌ [discord_rooms_ids] Chyba při zápisu: {e}")
+        print(f"[discord_rooms_ids] Chyba při zápisu: {e}")
 
 def reset_war_reminder_flags():
     """Smaže všechny klíče začínající na 'war_reminder_' z JSON souboru."""
@@ -200,9 +200,10 @@ class ClanWarHandler:
         state = war_data.get('state', 'unknown')
 
         # Pokud se stav změnil na warEnded mělo by proběhnout jen 1x
-        if state == "warEnded" and self._last_state and self._last_state != "warEnded":
+        if self._last_state is not None and state == "warEnded" and self._last_state != "warEnded":
             # pokud chceme smazat mistnost tak odkomentujeme funkci
             #await self._clear_war_channels()
+            await self.update_war_status(war_data)
             self.current_war_message_id = None
             save_room_id("war_status_message", None)
 
@@ -233,8 +234,8 @@ class ClanWarHandler:
                 for i in range(0, len(mentions), 5):
                     await war_end_channel.send(" ".join(mentions[i:i + 5]))
 
-        # Reset událostí, pokud válka začala znovu
-        if self._last_state == 'warEnded' and state == 'preparation':
+        # Reset událostí, pokud začal preperation mělo by se spustit jen 1x
+        if self._last_state is not None and self._last_state != 'preparation' and state == 'preparation':
             print("🔁 [clan_war] Detekována nová válka – resetuji pořadí útoků.")
             self.last_processed_order = 0
             save_room_id("last_war_event_order", 0)
