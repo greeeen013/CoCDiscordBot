@@ -19,49 +19,52 @@ STATE_MAP = {
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
 
-def load_room_id(key: str):
-    try:
-        if os.path.exists(ROOM_IDS_PATH):
-            with open(ROOM_IDS_PATH, "r") as f:
-                return json.load(f).get(key)
-    except Exception as e:
-        print(f"[discord_rooms_ids] Chyba při čtení: {e}")
-    return None
 
+class RoomIdStorage:
+    def __init__(self):
+        self.data = {}
+        self.load()
 
-def save_room_id(key: str, message_id: Optional[int]):
-    try:
-        data = {}
-        if os.path.exists(ROOM_IDS_PATH):
-            with open(ROOM_IDS_PATH, "r") as f:
-                data = json.load(f)
-        if message_id is None:
-            data.pop(key, None)
-        else:
-            data[key] = message_id
-        with open(ROOM_IDS_PATH, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        print(f"[discord_rooms_ids] Chyba při zápisu: {e}")
+    def load(self):
+        try:
+            if os.path.exists(ROOM_IDS_PATH):
+                with open(ROOM_IDS_PATH, "r") as f:
+                    self.data = json.load(f)
+        except Exception as e:
+            print(f"[clan_war] [discord_rooms_ids] Chyba při čtení: {e}")
+            self.data = {}
 
-def reset_war_reminder_flags():
-    """Smaže všechny klíče začínající na 'war_reminder_' z JSON souboru."""
-    try:
-        if os.path.exists(ROOM_IDS_PATH):
-            with open(ROOM_IDS_PATH, "r") as f:
-                data = json.load(f)
-
-            # Smažeme všechny klíče začínající na 'war_reminder_'
-            keys_to_remove = [key for key in data if key.startswith("war_reminder_")]
-            for key in keys_to_remove:
-                data.pop(key, None)
-
+    def save(self):
+        try:
             with open(ROOM_IDS_PATH, "w") as f:
-                json.dump(data, f)
+                json.dump(self.data, f)
+        except Exception as e:
+            print(f"[clan_war] [discord_rooms_ids] Chyba při zápisu: {e}")
 
+    def get(self, key: str):
+        return self.data.get(key)
+
+    def set(self, key: str, value):
+        self.data[key] = value
+        self.save()
+
+    def remove(self, key: str):
+        if key in self.data:
+            del self.data[key]
+            self.save()
+
+    def reset_war_reminder_flags(self):
+        """Smaže všechny klíče začínající na 'war_reminder_'"""
+        keys_to_remove = [key for key in self.data if key.startswith("war_reminder_")]
+        for key in keys_to_remove:
+            del self.data[key]
+        if keys_to_remove:
+            self.save()
             print(f"♻️ [clan_war] Resetováno {len(keys_to_remove)} war reminder flagů.")
-    except Exception as e:
-        print(f"❌ [clan_war] Chyba při resetu war reminder flagů: {e}")
+
+
+room_storage = RoomIdStorage()
+
 
 class ClanWarHandler:
     def __init__(self, bot, config):
@@ -70,19 +73,32 @@ class ClanWarHandler:
         self.war_status_channel_id = 1366835944174391379
         self.war_events_channel_id = 1366835971395686554
         self.war_ping_channel_id = 1371089891621998652
-        self.last_processed_order = load_room_id("last_war_event_order") or 0
-        self.current_war_message_id = load_room_id("war_status_message")
+        self.last_processed_order = room_storage.get("last_war_event_order") or 0
+        self.current_war_message_id = room_storage.get("war_status_message")
         self._last_state = None
+
+        # Cache
+        self._mention_cache = {}
+        self._time_cache = {}
+        self._escaped_names = {}
+
+    def _escape_name(self, name: str) -> str:
+        """Vrací escapované jméno s cache"""
+        if not name:
+            return ""
+
+        if name not in self._escaped_names:
+            self._escaped_names[name] = escape_markdown(name.replace('_', r'\_'))
+        return self._escaped_names[name]
 
     async def remind_missing_attacks(self, war_data: dict, send_warning: bool = True) -> Optional[str]:
         """
         Odešle upozornění do vybraného kanálu, pokud zbývá 6h, 2h nebo 1h do konce války
         a někteří hráči ještě neodehráli ani jeden útok. Každé upozornění se odešle jen jednou.
-        Navíc vrací zprávu s aktuálním zbývajícím časem do konce války a seznamem hráčů bez útoku.
         """
         end_time = self._parse_coc_time(war_data.get('endTime', ''))
         if not end_time:
-            return None  # Pokud není k dispozici čas konce války, funkce vrací None
+            return None
 
         now = datetime.now(timezone.utc)
         remaining_seconds = (end_time - now).total_seconds()
@@ -92,104 +108,89 @@ class ClanWarHandler:
         # Seznam členů klanu, kteří zatím neútočili
         missing_members = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
 
-        # Pomocná funkce pro formátování zbývajícího času (hodiny a minuty)
+        # Formátování zbývajícího času
         def format_remaining_time(seconds: float) -> str:
             if seconds < 0:
                 seconds = 0
-            total_minutes = int(seconds // 60)
-            hours = total_minutes // 60
-            minutes = total_minutes % 60
-            def format_hours(h: int) -> str:
-                if h == 1:
-                    return "1 hodina"
-                elif 2 <= h <= 4:
-                    return f"{h} hodiny"
-                else:
-                    return f"{h} hodin"
-            def format_minutes(m: int) -> str:
-                if m == 1:
-                    return "1 minuta"
-                elif 2 <= m <= 4:
-                    return f"{m} minuty"
-                else:
-                    return f"{m} minut"
-            if hours > 0 and minutes > 0:
-                return f"{format_hours(hours)} {format_minutes(minutes)}"
-            elif hours > 0 and minutes == 0:
-                return f"{format_hours(hours)}"
-            else:
-                # Pokud zbývají méně než 1 hodina, vrátí pouze minuty
-                return f"{format_minutes(minutes)}"
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
 
-        # Pokud je povoleno zasílat varování (automatické připomínky ve stanovených intervalech)
+            parts = []
+            if hours > 0:
+                parts.append(f"{hours} hodin" if hours > 4 else f"{hours} hodiny" if hours > 1 else "1 hodina")
+            if minutes > 0 or not parts:
+                parts.append(f"{minutes} minut" if minutes > 4 else f"{minutes} minuty" if minutes > 1 else "1 minuta")
+
+            return " ".join(parts)
+
+        # Pokud je povoleno zasílat varování
         if send_warning:
             for mark in hour_marks:
                 key = f"war_reminder_{mark}h"
-                already_sent = load_room_id(key)
+                already_sent = room_storage.get(key)
                 if remaining_hours <= mark and not already_sent:
                     if not missing_members:
-                        save_room_id(key, True)
+                        room_storage.set(key, True)
                         continue
+
                     ping_channel = self.bot.get_channel(self.war_ping_channel_id)
                     mention = "<@317724566426222592>"
 
-                    # Připravit seznam zmínek hráčů, kteří neútočili
+                    # Připravit seznam zmínek hráčů
                     mentions_list = []
                     for m in missing_members:
                         tag = m.get("tag")
-                        name = m.get("name", "Unknown").replace('_', r'\_').replace('*', r'\*')
+                        name = self._escape_name(m.get("name", "Unknown"))
                         discord_mention = await self._get_discord_mention(tag)
-                        if discord_mention:
-                            mentions_list.append(discord_mention)
-                        else:
-                            mentions_list.append(f"@{name}")
+                        mentions_list.append(discord_mention or f"@{name}")
 
-                    # Text upozornění s dynamickým časem do konce války
-                    time_str = format_remaining_time((end_time - datetime.now(timezone.utc)).total_seconds())
+                    # Text upozornění
+                    time_str = format_remaining_time(remaining_seconds)
                     if mark == 1:
                         await ping_channel.send(f"{mention} ⚠️ **POSLEDNÍ VAROVÁNÍ – zbývá {time_str} do konce!**")
                     else:
                         await ping_channel.send(f"{mention} Připomínka: zbývá {time_str} do konce války")
 
-                    # Odeslat zmínky po skupinách (max 5 v jedné zprávě) – přidána mezera i na konci poslední skupiny
+                    # Odeslat zmínky po skupinách
                     for i in range(0, len(mentions_list), 5):
-                        await ping_channel.send(" ".join(mentions_list[i:i+5]) + " ")
+                        await ping_channel.send(" ".join(mentions_list[i:i + 5]) + " ")
 
-                    # Soukromá připomínka hráčům přes DM (pokud mají propojený Discord účet)
+                    # Soukromé připomínky hráčům přes DM
                     all_links = get_all_links()
+                    dm_targets = {
+                        m.get("tag"): m.get("name", "Unknown")
+                        for m in missing_members
+                        if m.get("tag") in {tag.upper() for _, (tag, _) in all_links.items()}
+                    }
+
                     for discord_id, (linked_tag, _) in all_links.items():
-                        if linked_tag.upper() == tag.upper():
+                        if linked_tag.upper() in dm_targets:
                             try:
                                 user = await self.bot.fetch_user(discord_id)
                                 if user:
                                     await user.send(
                                         f"⚔️ Připomínka: zbývá {time_str} do konce clan war!\n"
-                                        f"Ještě jsi **neodehrál** žádný útok za svůj účet: `{tag}`.\n"
+                                        f"Ještě jsi **neodehrál** žádný útok za svůj účet: `{linked_tag}`.\n"
                                         f"Nezapomeň prosím odehrát, ať neztrácíme hvězdy 🙏"
                                     )
                             except Exception as dm_error:
-                                print(f"⚠️ [remind] Nepodařilo se odeslat DM hráči s tagem {tag}: {dm_error}")
-                            break
+                                print(f"⚠️ [remind] Nepodařilo se odeslat DM hráči s tagem {linked_tag}: {dm_error}")
 
-                    save_room_id(key, True)
+                    room_storage.set(key, True)
 
-        # Sestavení výstupní zprávy pro vrácení (zbývající čas + výpis hráčů bez útoku)
+        # Sestavení výstupní zprávy
         time_remaining_str = format_remaining_time(remaining_seconds)
         if not missing_members:
-            # Pokud nikdo nechybí (všichni odehráli)
             return f"Do konce války zbývá {time_remaining_str}. ✅ Všichni členové klanu již provedli své útoky."
         else:
-            # Vypsat hráče, kteří neútočili, oddělené mezerami (za každým jménem včetně posledního je mezera)
             mentions_output = []
             for m in missing_members:
                 tag = m.get("tag")
-                name = m.get("name", "Unknown").replace('_', r'\_').replace('*', r'\*')
+                name = self._escape_name(m.get("name", "Unknown"))
                 discord_mention = await self._get_discord_mention(tag)
-                if discord_mention:
-                    mentions_output.append(discord_mention)
-                else:
-                    mentions_output.append(f"@{name}")
-            return f"Do konce války zbývá {time_remaining_str}. Útok dosud neprovedli: " + " ".join(mentions_output) + " "
+                mentions_output.append(discord_mention or f"@{name}")
+            return f"Do konce války zbývá {time_remaining_str}. Útok dosud neprovedli: " + " ".join(
+                mentions_output) + " "
 
     async def process_war_data(self, war_data: dict):
         """Zpracuje data o válce a aktualizuje Discord"""
@@ -199,15 +200,13 @@ class ClanWarHandler:
 
         state = war_data.get('state', 'unknown')
 
-        # Pokud se stav změnil na warEnded mělo by proběhnout jen 1x
+        # Reset při změně stavu
         if self._last_state is not None and state == "warEnded" and self._last_state != "warEnded":
-            # pokud chceme smazat mistnost tak odkomentujeme funkci
-            #await self._clear_war_channels()
             await self.update_war_status(war_data)
             self.current_war_message_id = None
-            save_room_id("war_status_message", None)
+            room_storage.set("war_status_message", None)
 
-            # === Oznámení o neodehraných útocích ===
+            # Oznámení o neodehraných útocích
             war_end_channel = self.bot.get_channel(self.war_ping_channel_id)
             missing = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
             if war_end_channel and missing:
@@ -216,14 +215,11 @@ class ClanWarHandler:
 
                 for m in missing:
                     tag = m.get("tag")
-                    name = m.get("name", "Unknown")
+                    name = self._escape_name(m.get("name", "Unknown"))
                     discord_mention = await self._get_discord_mention(tag)
-                    if discord_mention:
-                        mentions.append(discord_mention)
-                    else:
-                        mentions.append(f"@{name}")
+                    mentions.append(discord_mention or f"@{name}")
 
-                    # ⚠️ Přidání varování za neodehranou válku
+                    # Přidání varování
                     await notify_single_warning(
                         bot=self.bot,
                         coc_tag=tag,
@@ -234,12 +230,12 @@ class ClanWarHandler:
                 for i in range(0, len(mentions), 5):
                     await war_end_channel.send(" ".join(mentions[i:i + 5]))
 
-        # Reset událostí, pokud začal preperation mělo by se spustit jen 1x
+        # Reset událostí při nové válce
         if self._last_state is not None and self._last_state != 'preparation' and state == 'preparation':
             print("🔁 [clan_war] Detekována nová válka – resetuji pořadí útoků.")
             self.last_processed_order = 0
-            save_room_id("last_war_event_order", 0)
-            reset_war_reminder_flags()
+            room_storage.set("last_war_event_order", 0)
+            room_storage.reset_war_reminder_flags()
 
         self._last_state = state
 
@@ -248,37 +244,14 @@ class ClanWarHandler:
             return
 
         try:
-            # Připomenutí hráčům bez útoku
             await self.remind_missing_attacks(war_data)
-
-            # Aktualizace stavu války
             await self.update_war_status(war_data)
 
-            # Zpracování událostí (útoků)
             if war_data.get('state') in ('inWar', 'preparation'):
                 await self.process_war_events(war_data)
 
         except Exception as e:
             print(f"❌ [clan_war] Chyba při zpracování dat: {str(e)}")
-
-    async def _clear_war_channels(self):
-        """Smaže obsah war kanálů"""
-        try:
-            status_channel = self.bot.get_channel(self.war_status_channel_id)
-            events_channel = self.bot.get_channel(self.war_events_channel_id)
-
-            if status_channel:
-                await status_channel.purge(limit=100)
-                print("[clan_war] Obsah kanálu se stavem války byl smazán")
-
-            if events_channel:
-                await events_channel.purge(limit=100)
-                print("[clan_war] Obsah kanálu s událostmi války byl smazán")
-
-            self.last_processed_order = 0
-
-        except Exception as e:
-            print(f"❌ [clan_war] Chyba při mazání kanálů: {str(e)}")
 
     async def update_war_status(self, war_data: dict):
         """Vytvoří nebo aktualizuje embed se stavem války"""
@@ -297,23 +270,24 @@ class ClanWarHandler:
                 except discord.NotFound:
                     print("⚠️ [clan_war] Původní zpráva nenalezena, posílám novou.")
                     self.current_war_message_id = None
+
             if not self.current_war_message_id:
                 message = await channel.send(embed=embed)
                 self.current_war_message_id = message.id
-                save_room_id("war_status_message", message.id)
+                room_storage.set("war_status_message", message.id)
 
         except Exception as e:
             print(f"❌ [clan_war] Chyba při aktualizaci stavu války: {str(e)}")
 
     def _create_war_status_embed(self, war_data: dict) -> discord.Embed:
-        """Vytvoří embed se stavem války s dynamickým rozdělením hráčů na víc fieldů podle limitu 1024 znaků."""
+        """Vytvoří embed se stavem války s dynamickým rozdělením hráčů"""
         clan = war_data.get('clan', {})
         opponent = war_data.get('opponent', {})
         state = war_data.get('state', 'unknown')
 
         embed = discord.Embed(
-            title=f"Clan War: {clan.get('name', 'Náš klan')} vs {opponent.get('name', 'Protivník')}",
-            color=discord.Color.blue() if state == "Inwar" else discord.Color.gold()
+            title=f"Clan War: {self._escape_name(clan.get('name', 'Náš klan'))} vs {self._escape_name(opponent.get('name', 'Protivník'))}",
+            color=discord.Color.blue() if state == "inWar" else discord.Color.gold()
         )
 
         # Základní statistiky
@@ -328,9 +302,10 @@ class ClanWarHandler:
             f"{opponent.get('destructionPercentage', 0)}%"
         )
 
-        embed.add_field(name=f"**{clan.get('name', 'Náš klan')}**", value=our_stats, inline=True)
+        embed.add_field(name=f"**{self._escape_name(clan.get('name', 'Náš klan'))}**", value=our_stats, inline=True)
         embed.add_field(name="\u200b", value="⁣  **VS**", inline=True)
-        embed.add_field(name=f"**{opponent.get('name', 'Protivník')}**", value=their_stats, inline=True)
+        embed.add_field(name=f"**{self._escape_name(opponent.get('name', 'Protivník'))}**", value=their_stats,
+                        inline=True)
 
         # Časy
         prep_time = self._parse_coc_time(war_data.get('preparationStartTime', ''))
@@ -351,7 +326,7 @@ class ClanWarHandler:
                     inline=True
                 )
 
-        # Hráči – dynamické dělení na více fieldů
+        # Hráči – dynamické dělení na více fieldů podle limitu 1024 znaků
         if war_data.get('state') in ('inWar', 'preparation', 'warEnded'):
             def format_members(members):
                 formatted = []
@@ -360,7 +335,7 @@ class ClanWarHandler:
                         "{index}. {emoji} {name} ({attacks}/{max_attacks})".format(
                             index=idx,
                             emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
-                            name=m.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*'),
+                            name=self._escape_name(m.get('name', 'Unknown')),
                             attacks=len(m.get('attacks', [])),
                             max_attacks=war_data.get('attacksPerMember', 2)
                         )
@@ -372,7 +347,7 @@ class ClanWarHandler:
                 current_left, current_right = [], []
                 length_left = length_right = 0
                 for l_line, r_line in zip(left_lines, right_lines):
-                    l_len = len(l_line) + 1
+                    l_len = len(l_line) + 1  # +1 za nový řádek
                     r_len = len(r_line) + 1
                     if (length_left + l_len > 1024) or (length_right + r_len > 1024):
                         chunks.append(("\n".join(current_left), "\n".join(current_right)))
@@ -390,12 +365,10 @@ class ClanWarHandler:
             our_raw = format_members(clan.get('members', []))
             their_raw = format_members(opponent.get('members', []))
 
-            # Zarovnej délky seznamů (pokud jeden z nich je delší)
+            # Zarovnej délky seznamů
             max_len = max(len(our_raw), len(their_raw))
-            while len(our_raw) < max_len:
-                our_raw.append("—")
-            while len(their_raw) < max_len:
-                their_raw.append("—")
+            our_raw += ["—"] * (max_len - len(our_raw))
+            their_raw += ["—"] * (max_len - len(their_raw))
 
             chunks = split_to_chunks_pairwise(our_raw, their_raw)
 
@@ -406,9 +379,9 @@ class ClanWarHandler:
                     embed.add_field(name="**Jejich hráči**", value=their_value, inline=True)
                 else:
                     embed.add_field(name=" ", value=" ", inline=False)
-                    embed.add_field(name=f"**Naši hráči**", value=our_value, inline=True)
+                    embed.add_field(name="**Naši hráči**", value=our_value, inline=True)
                     embed.add_field(name=" ", value=" ", inline=True)
-                    embed.add_field(name=f"**Jejich hráči**", value=their_value, inline=True)
+                    embed.add_field(name="**Jejich hráči**", value=their_value, inline=True)
 
         friendly_state = STATE_MAP.get(state, state)
         embed.set_footer(text=f"Stav války: {friendly_state}")
@@ -421,22 +394,28 @@ class ClanWarHandler:
             print("❌ [clan_war] Kanál pro události války nebyl nalezen")
             return
 
+        # Získání všech útoků
         attacks = []
-        for member in war_data.get('clan', {}).get('members', []):
-            attacks.extend(member.get('attacks', []))
-        for member in war_data.get('opponent', {}).get('members', []):
-            attacks.extend(member.get('attacks', []))
+        for side in ('clan', 'opponent'):
+            for member in war_data.get(side, {}).get('members', []):
+                attacks.extend(member.get('attacks', []))
 
-        new_attacks = [a for a in attacks if a.get('order', 0) > self.last_processed_order]
+        # Filtrace a řazení nových útoků
+        new_attacks = sorted(
+            (a for a in attacks if a.get('order', 0) > self.last_processed_order),
+            key=lambda x: x.get('order', 0)
+        )
+
         if not new_attacks:
             return
 
-        new_attacks.sort(key=lambda x: x.get('order', 0))
-
+        # Zpracování útoků
         for attack in new_attacks:
             await self._send_attack_embed(channel, attack, war_data)
-            self.last_processed_order = max(self.last_processed_order, attack.get('order', 0))
-            save_room_id("last_war_event_order", self.last_processed_order)
+
+        # Uložení posledního orderu
+        self.last_processed_order = max(a.get('order', 0) for a in new_attacks)
+        room_storage.set("last_war_event_order", self.last_processed_order)
 
     async def _send_attack_embed(self, channel, attack: dict, war_data: dict):
         """Vytvoří embed pro jeden útok"""
@@ -449,23 +428,17 @@ class ClanWarHandler:
         is_our_attack = any(m.get('tag') == attacker.get('tag') for m in war_data.get('clan', {}).get('members', []))
         discord_mention = await self._get_discord_mention(attack.get('attackerTag'))
 
-        # Debug ping
-        if discord_mention:
-            print(f"✅ [clan_war] Nalezen Discord uživatel pro tag {attack.get('attackerTag')}: {discord_mention}")
-
         # Barva podle typu akce
         embed_color = discord.Color.red() if is_our_attack else discord.Color.blue()
         embed = discord.Embed(color=embed_color)
 
-        # Escape jména hráčů
-        attacker_name = attacker.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*')
-        defender_name = defender.get('name', 'Unknown').replace('_', r'\_').replace('*', r'\*')
+        # Escape jména
+        attacker_name = self._escape_name(attacker.get('name', 'Unknown'))
+        defender_name = self._escape_name(defender.get('name', 'Unknown'))
+        clan_name = self._escape_name(war_data.get('clan', {}).get('name', 'Náš klan'))
+        opponent_name = self._escape_name(war_data.get('opponent', {}).get('name', 'Protivník'))
 
-        # Escape jména klanů
-        clan_name = war_data.get('clan', {}).get('name', 'Náš klan').replace('_', r'\_').replace('*', r'\*')
-        opponent_name = war_data.get('opponent', {}).get('name', 'Protivník').replace('_', r'\_').replace('*', r'\*')
-
-        # Levá strana = náš klan, Pravá strana = protivník (vždy stejně)
+        # Určení pozic
         left_pos = attacker.get("mapPosition") if is_our_attack else defender.get("mapPosition")
         right_pos = defender.get("mapPosition") if is_our_attack else attacker.get("mapPosition")
 
@@ -475,16 +448,18 @@ class ClanWarHandler:
         left_th = attacker.get('townhallLevel', 10) if is_our_attack else defender.get('townhallLevel', 10)
         right_th = defender.get('townhallLevel', 10) if is_our_attack else attacker.get('townhallLevel', 10)
 
-        # Oprava: kontrola počtu útoků na daného obránce (stejná mapPosition)
+        # Kontrola oprav
         defender_position = defender.get("mapPosition")
         all_attacks = []
-        for member in war_data.get('clan', {}).get('members', []) + war_data.get('opponent', {}).get('members', []):
-            all_attacks.extend(member.get('attacks', []))
+        for side in ('clan', 'opponent'):
+            for member in war_data.get(side, {}).get('members', []):
+                all_attacks.extend(member.get('attacks', []))
 
         duplicate_attacks = [a for a in all_attacks if
                              a.get('defenderTag') == defender.get('tag') and a.get('order', 0) < attack.get('order', 0)]
         is_oprava = len(duplicate_attacks) > 0
 
+        # Sestavení embedu
         left_side = (
             f"**{clan_name}**\n"
             f"#{(left_pos or 1)} | {TOWN_HALL_EMOJIS.get(left_th, '')} {left_name}"
@@ -496,10 +471,6 @@ class ClanWarHandler:
             f"**{opponent_name}**\n"
             f"#{(right_pos or 1)} | {TOWN_HALL_EMOJIS.get(right_th, '')} {right_name}"
         )
-        # pokud není náš útok, a je to oprava, tak přidáme mention
-        #if not is_our_attack and is_oprava:
-        #    left_side += f"\n`oprava`"
-
         if is_our_attack and is_oprava:
             right_side += f"\n`oprava`"
 
@@ -516,7 +487,7 @@ class ClanWarHandler:
         embed.add_field(name="\u200b", value=middle_field, inline=True)
         embed.add_field(name="\u200b", value=right_side, inline=True)
 
-        # Výpočet času do konce války
+        # Čas do konce války
         end_time = self._parse_coc_time(war_data.get('endTime', ''))
         remaining_hours = None
         if end_time:
@@ -524,19 +495,20 @@ class ClanWarHandler:
             delta = end_time - now
             remaining_hours = max(delta.total_seconds() / 3600, 0)
 
-            # === Pochvala: útok na mirror, 100 %, včas ===
-            if is_our_attack and attacker.get("mapPosition") == defender.get("mapPosition") and attack.get(
-                    "destructionPercentage", 0) == 100:
-                if remaining_hours is not None and remaining_hours >= 5:
-                    praise_channel = self.bot.get_channel(1371170358056452176)
-                    discord_mention = await self._get_discord_mention(attacker.get("tag"))
-                    name_or_mention = discord_mention or f"@{attacker.get('name', 'neznámý')}"
-                    if praise_channel:
-                        await praise_channel.send(f"{name_or_mention}\nPochvala za krásný útok na mirror včas!")
+            # Pochvala za mirror
+            if (is_our_attack and
+                    attacker.get("mapPosition") == defender.get("mapPosition") and
+                    attack.get("destructionPercentage", 0) == 100 and
+                    remaining_hours >= 5):
+                praise_channel = self.bot.get_channel(1371170358056452176)
+                discord_mention = await self._get_discord_mention(attacker.get("tag"))
+                name_or_mention = discord_mention or f"@{attacker.get('name', 'neznámý')}"
+                if praise_channel:
+                    await praise_channel.send(f"{name_or_mention}\nPochvala za krásný útok na mirror včas!")
 
-            # === Varování: špatný útok na jiné číslo před 5. hodinou od konce ===
+            # Varování za non-mirror
             if is_our_attack and not is_oprava and attacker.get("mapPosition") != defender.get("mapPosition"):
-                if remaining_hours is not None and remaining_hours >= 5:
+                if remaining_hours >= 5:
                     await notify_single_warning(
                         bot=self.bot,
                         coc_tag=attacker.get("tag"),
@@ -544,6 +516,7 @@ class ClanWarHandler:
                         reason="clan wars útok který nebyl mirror"
                     )
 
+        # Footer
         footer_parts = [
             f"Útok #{attack.get('order', 0)}",
             f"Útok trval: {attack.get('duration', 0)}s"
@@ -558,29 +531,38 @@ class ClanWarHandler:
         """Najde člena podle tagu"""
         if not tag:
             return None
-        for member in war_data.get('clan', {}).get('members', []):
-            if member.get('tag') == tag:
-                return member
-        for member in war_data.get('opponent', {}).get('members', []):
-            if member.get('tag') == tag:
-                return member
+        for side in ('clan', 'opponent'):
+            for member in war_data.get(side, {}).get('members', []):
+                if member.get('tag') == tag:
+                    return member
         return None
 
     async def _get_discord_mention(self, coc_tag: str) -> Optional[str]:
-        """Získá Discord mention propojeného uživatele"""
-        from database import get_all_links
-        links = get_all_links()
-        for discord_id, (tag, _) in links.items():
-            if tag == coc_tag:
-                member = self.bot.get_guild(self.config['GUILD_ID']).get_member(discord_id)
+        """Získá Discord mention propojeného uživatele (s cache)"""
+        if not coc_tag:
+            return None
+
+        if not hasattr(self, '_mention_cache'):
+            self._mention_cache = {}
+            links = get_all_links()
+            guild = self.bot.get_guild(self.config['GUILD_ID'])
+            for discord_id, (tag, _) in links.items():
+                member = guild.get_member(discord_id)
                 if member:
-                    print(f"[clan_war] Nalezen propojený uživatel: {member.display_name} ({member.id})")
-                    return member.mention
-        return None
+                    self._mention_cache[tag.upper()] = member.mention
+
+        return self._mention_cache.get(coc_tag.upper())
 
     def _parse_coc_time(self, time_str: str) -> Optional[datetime]:
-        """Parsuje čas z API CoC a vrací offset-aware UTC datetime"""
-        try:
-            return datetime.strptime(time_str, "%Y%m%dT%H%M%S.000Z").replace(tzinfo=timezone.utc)
-        except (ValueError, AttributeError):
+        """Parsuje čas z API CoC (s cache)"""
+        if not time_str:
             return None
+
+        if time_str not in self._time_cache:
+            try:
+                self._time_cache[time_str] = datetime.strptime(time_str, "%Y%m%dT%H%M%S.000Z").replace(
+                    tzinfo=timezone.utc)
+            except (ValueError, AttributeError):
+                self._time_cache[time_str] = None
+
+        return self._time_cache[time_str]
