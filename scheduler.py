@@ -1,6 +1,8 @@
 import asyncio
 from datetime import datetime
 
+import aiohttp
+
 from api_handler import fetch_clan_members_list, fetch_player_data
 from database import process_clan_data, get_all_links, get_all_members, cleanup_old_warnings
 from member_tracker import discord_sync_members_once
@@ -25,7 +27,8 @@ async def hourly_clan_update(config: dict, bot):
     clan_capital_handler = ClanCapitalHandler(bot, config)
     while True:
         if not is_hourly_paused:
-            print(f"🕒 [Scheduler] spouštím hourly_clan_update Aktuální datum a čas: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+            print(
+                f"🕒 [Scheduler] spouštím hourly_clan_update Aktuální datum a čas: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
             # === Kontrola Discord uživatelů ===
             try:
@@ -33,7 +36,7 @@ async def hourly_clan_update(config: dict, bot):
             except Exception as e:
                 print(f"[scheduler] ⚠️ member sync chyba: {e}")
 
-            # === Načtení clanu ===
+            # === Načtení guildy ===
             guild = bot.get_guild(config["GUILD_ID"])
             if guild is None:
                 print(f"❌ [Scheduler] Guild s ID {config['GUILD_ID']} nebyl nalezen.")
@@ -42,41 +45,65 @@ async def hourly_clan_update(config: dict, bot):
 
             # === Načtení seznamu členů klanu ===
             print("🔁 [Scheduler] Spouštím aktualizaci seznamu členů klanu...")
-            data = await fetch_clan_members_list(config["CLAN_TAG"], config)
-            if data:
-                print(f"✅ [Scheduler] Načteno {len(data.get('items', []))} členů klanu.")
-                process_clan_data(data.get("items", []), bot=bot)
+            try:
+                data = await fetch_clan_members_list(config["CLAN_TAG"], config)
+                if data:
+                    print(f"✅ [Scheduler] Načteno {len(data.get('items', []))} členů klanu.")
+                    process_clan_data(data.get("items", []), bot=bot)
+                else:
+                    print("⚠️ [Scheduler] Nepodařilo se získat seznam členů klanu.")
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                print(f"❌ [Scheduler] Chyba při načítání členů klanu: {e}")
+            except Exception as e:
+                print(f"❌ [Scheduler] Neočekávaná chyba při fetch_clan_members_list: {e}")
 
             # === Aktualizace rolí ===
-            print("🔄 [Scheduler] Spouštím automatickou aktualizaci rolí...")
-            links = get_all_links()
-            members = get_all_members()
-            await update_roles(guild, links, members)
-            print("✅ [Scheduler] Aktualizace rolí dokončena.")
+            try:
+                print("🔄 [Scheduler] Spouštím automatickou aktualizaci rolí...")
+                links = get_all_links()
+                members = get_all_members()
+                await update_roles(guild, links, members)
+                print("✅ [Scheduler] Aktualizace rolí dokončena.")
+            except Exception as e:
+                print(f"❌ [Scheduler] Chyba při aktualizaci rolí: {e}")
 
             # === WAR STATUS ===
-            war_data = await fetch_current_war("#2QQ0PY9V8", config)
-            if war_data:
-                await clan_war_handler.process_war_data(war_data)
+            try:
+                war_data = await fetch_current_war("#2QQ0PY9V8", config)
+                if war_data:
+                    await clan_war_handler.process_war_data(war_data)
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                print(f"❌ [Scheduler] Chyba při načítání war dat: {e}")
+            except Exception as e:
+                print(f"❌ [Scheduler] Neočekávaná chyba ve WAR části: {e}")
 
             # === CAPITAL STATUS ===
-
-            capital_data = await fetch_current_capital(config["CLAN_TAG"], config)
-            if capital_data:
-                await clan_capital_handler.process_capital_data(capital_data)
+            try:
+                capital_data = await fetch_current_capital(config["CLAN_TAG"], config)
+                if capital_data:
+                    await clan_capital_handler.process_capital_data(capital_data)
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                print(f"❌ [Scheduler] Chyba při načítání capital dat: {e}")
+            except Exception as e:
+                print(f"❌ [Scheduler] Neočekávaná chyba v CAPITAL části: {e}")
 
             # === GAME EVENTS ===
-            game_events_handler = GameEventsHandler(bot, config)
-            await game_events_handler.process_game_events()
+            try:
+                game_events_handler = GameEventsHandler(bot, config)
+                await game_events_handler.process_game_events()
+            except Exception as e:
+                print(f"❌ [Scheduler] Chyba při zpracování game eventů: {e}")
 
-            # === mazání a upozornění ohledně varováních ===
-            await cleanup_old_warnings()
-
+            # === VAROVÁNÍ ===
+            try:
+                await cleanup_old_warnings()
+            except Exception as e:
+                print(f"❌ [Scheduler] Chyba při mazání varování: {e}")
 
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(60*3)  # každých 15 minut
+        await asyncio.sleep(60 * 3)  # každých 15 minut
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
