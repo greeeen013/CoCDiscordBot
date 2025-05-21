@@ -82,6 +82,32 @@ class ClanWarHandler:
         self._time_cache = {}
         self._escaped_names = {}
 
+    def _format_remaining_time(self, seconds: float) -> str:
+        """Formátuje zbývající čas do konce války do textové podoby"""
+        if seconds < 0:
+            seconds = 0
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+
+        parts = []
+        if hours > 0:
+            if hours == 1:
+                parts.append("1 hodina")
+            elif 2 <= hours <= 4:
+                parts.append(f"{hours} hodiny")
+            else:
+                parts.append(f"{hours} hodin")
+        if minutes > 0 or not parts:
+            if minutes == 1:
+                parts.append("1 minuta")
+            elif 2 <= minutes <= 4:
+                parts.append(f"{minutes} minuty")
+            else:
+                parts.append(f"{minutes} minut")
+
+        return " ".join(parts)
+
+
     def _escape_name(self, name: str) -> str:
         """Vrací escapované jméno s cache"""
         if not name:
@@ -108,75 +134,63 @@ class ClanWarHandler:
         # Seznam členů klanu, kteří zatím neútočili
         missing_members = [m for m in war_data.get('clan', {}).get('members', []) if not m.get('attacks')]
 
-        # Formátování zbývajícího času
-        def format_remaining_time(seconds: float) -> str:
-            if seconds < 0:
-                seconds = 0
-            hours = int(seconds // 3600)
-            minutes = int((seconds % 3600) // 60)
-
-            parts = []
-            if hours > 0:
-                parts.append(f"{hours} hodin" if hours > 4 else f"{hours} hodiny" if hours > 1 else "1 hodina")
-            if minutes > 0 or not parts:
-                parts.append(f"{minutes} minut" if minutes > 4 else f"{minutes} minuty" if minutes > 1 else "1 minuta")
-
-            return " ".join(parts)
-
         # Pokud je povoleno zasílat varování
         if send_warning:
             for mark in hour_marks:
                 key = f"war_reminder_{mark}h"
                 already_sent = room_storage.get(key)
+
+                # Kontrola časového intervalu a zda už nebylo upozornění odesláno
                 if remaining_hours <= mark and not already_sent:
                     if not missing_members:
                         room_storage.set(key, True)
                         continue
 
                     ping_channel = self.bot.get_channel(self.war_ping_channel_id)
-                    mention = "<@317724566426222592>"
+                    if not ping_channel:
+                        continue
 
-                    # Připravit seznam zmínek hráčů
-                    mentions_list = []
-                    for m in missing_members:
-                        tag = m.get("tag")
-                        name = self._escape_name(m.get("name", "Unknown"))
-                        discord_mention = await self._get_discord_mention(tag)
-                        mentions_list.append(discord_mention or f"@{name}")
+                    try:
+                        mention = "<@317724566426222592>"
+                        time_str = self._format_remaining_time(remaining_seconds)
 
-                    # Text upozornění
-                    time_str = format_remaining_time(remaining_seconds)
-                    if mark == 1:
-                        await ping_channel.send(f"{mention} ⚠️ **POSLEDNÍ VAROVÁNÍ – zbývá {time_str} do konce!**")
-                    else:
-                        await ping_channel.send(f"{mention} Připomínka: zbývá {time_str} do konce války")
+                        if mark == 1:
+                            msg = await ping_channel.send(
+                                f"{mention} ⚠️ **POSLEDNÍ VAROVÁNÍ – zbývá {time_str} do konce!**")
+                        else:
+                            msg = await ping_channel.send(f"{mention} Připomínka: zbývá {time_str} do konce války")
 
-                    # Odeslat zmínky po skupinách
-                    for i in range(0, len(mentions_list), 5):
-                        await ping_channel.send(" ".join(mentions_list[i:i + 5]) + " ")
+                        # Odeslat zmínky hráčů
+                        mentions_list = []
+                        for m in missing_members:
+                            tag = m.get("tag")
+                            name = self._escape_name(m.get("name", "Unknown"))
+                            discord_mention = await self._get_discord_mention(tag)
+                            mentions_list.append(discord_mention or f"@{name}")
 
-                    # Soukromé připomínky hráčům přes DM
-                    all_links = get_all_links()
-                    dm_targets = {
-                        m.get("tag"): m.get("name", "Unknown")
-                        for m in missing_members
-                        if m.get("tag") in {tag.upper() for _, (tag, _) in all_links.items()}
-                    }
+                        for i in range(0, len(mentions_list), 5):
+                            await ping_channel.send(" ".join(mentions_list[i:i + 5]) + " ")
 
-                    for discord_id, (linked_tag, _) in all_links.items():
-                        if linked_tag.upper() in dm_targets:
-                            try:
-                                user = await self.bot.fetch_user(discord_id)
-                                if user:
-                                    await user.send(
-                                        f"⚔️ Připomínka: zbývá {time_str} do konce clan war!\n"
-                                        f"Ještě jsi **neodehrál** žádný útok za svůj účet: `{linked_tag}`.\n"
-                                        f"Nezapomeň prosím odehrát, ať neztrácíme hvězdy 🙏"
-                                    )
-                            except Exception as dm_error:
-                                print(f"⚠️ [remind] Nepodařilo se odeslat DM hráči s tagem {linked_tag}: {dm_error}")
+                        # Uložení stavu, že upozornění bylo odesláno
+                        room_storage.set(key, True)
+                        print(f"♻️ [clan_war] [Reminder] Upozornění {mark}h odesláno (zbývá {remaining_hours:.2f}h)")
 
-                    room_storage.set(key, True)
+                    except Exception as e:
+                        print(f"❌ [clan_war] [Reminder] Chyba při odesílání upozornění {mark}h: {e}")
+
+        # Vrácení stavového textu
+        time_remaining_str = self._format_remaining_time(remaining_seconds)
+        if not missing_members:
+            return f"Do konce války zbývá {time_remaining_str}. ✅ Všichni členové klanu již provedli své útoky."
+        else:
+            mentions_output = []
+            for m in missing_members:
+                tag = m.get("tag")
+                name = self._escape_name(m.get("name", "Unknown"))
+                discord_mention = await self._get_discord_mention(tag)
+                mentions_output.append(discord_mention or f"@{name}")
+            return f"Do konce války zbývá {time_remaining_str}. Útok dosud neprovedli: " + " ".join(
+                mentions_output) + " "
 
         # Sestavení výstupní zprávy
         time_remaining_str = format_remaining_time(remaining_seconds)
