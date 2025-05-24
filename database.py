@@ -189,25 +189,32 @@ def process_clan_data(data: list[dict], bot=None):
 
 def get_all_links():
     """
-    Vrátí záznam propojení mezi Discord ID a CoC účtem.
+    Vrátí záznam propojení mezi Discord ID a CoC účtem ve formátu:
+    {discord_id: (coc_tag, coc_name)}
+
+    Returns:
+        dict: Slovník s propojeními, nebo prázdný slovník při chybě
     """
+    result = {}
     try:
         with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row  # Pro přístup přes názvy sloupců
             cursor = conn.cursor()
 
-            cursor.execute("SELECT discord_name, coc_tag, coc_name FROM coc_discord_links")
-            rows = cursor.fetchall()
+            # Získání všech propojení (přidán discord_id)
+            cursor.execute("""
+                SELECT discord_name, coc_tag, coc_name 
+                FROM coc_discord_links
+            """)
 
-            conn.close()
+            for row in cursor.fetchall():
+                result[int(row['discord_name'])] = (row['coc_tag'], row['coc_name'])
 
-            # Předěláme správně na formát {discord_id: (coc_tag, coc_name)}
-            result = {}
-            for discord_id, coc_tag, coc_name in rows:
-                result[int(discord_id)] = (coc_tag, coc_name)
 
-            return result
-    except Exception as e:
-        print(f"❌ [database] Chyba při ukládání propojení: {e}")
+    except sqlite3.Error as e:
+        print(f"❌ [DATABASE] Chyba při čtení propojení: {e}")
+
+    return result
 
 # === Přidání propojení mezi Discord jménem a CoC účtem ===
 def add_coc_link(discord_name: str, coc_tag: str, coc_name: str):
