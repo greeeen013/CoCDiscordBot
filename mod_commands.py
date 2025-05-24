@@ -486,6 +486,9 @@ async def setup_mod_commands(bot):
 
     @bot.tree.command(name="pravidla_discord", description="Zobrazí pravidla Discord serveru", guild=bot.guild_object)
     async def pravidla_discord(interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
+            return
         embed = discord.Embed(
             title="📜 Pravidla Discord serveru",
             description="Pravidla pro všechny členy našeho Discord serveru:",
@@ -533,6 +536,10 @@ async def setup_mod_commands(bot):
 
     @bot.tree.command(name="pravidla_clan", description="Zobrazí pravidla herního klanu", guild=bot.guild_object)
     async def pravidla_clan(interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
+            return
+
         embed = discord.Embed(
             title="⚔️ Pravidla Klanu Czech Heroes",
             description="Pravidla pro všechny členy našeho herního klanu:",
@@ -584,4 +591,67 @@ async def setup_mod_commands(bot):
         embed.set_footer(text="Po 3 varováních hrozí kick z klanu")
 
         await interaction.response.send_message("Pravidla zobrazena", ephemeral=True, delete_after=1)
+        await interaction.channel.send(embed=embed)
+
+    @bot.tree.command(name="vitej", description="Vítej na našem Discord serveru", guild=bot.guild_object)
+    async def vitej(interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="🎉 Vítej na Discord serveru Czech Heroes!",
+            description=(
+                "Oficiální Discord pro herní klan **Czech Heroes** ze hry Clash of Clans!\n\n"
+                "Tento server je primárně určen pro členy našeho klanu, "
+                "ale návštěvníci budou brzy též vítáni."
+            ),
+            color=discord.Color.green()
+        )
+
+        # Sekce pro členy klanu
+        embed.add_field(
+            name="🔹 Jsi členem našeho klanu?",
+            value=(
+                f"1. Projdi si pravidla v {interaction.guild.get_channel(1366000196991062086).mention}\n"
+                f"2. Proveď ověření v {interaction.guild.get_channel(1366471838070476821).mention}\n"
+                "3. Po ověření získáš automaticky:\n"
+                "   - Speciální roli podle postavení v klanu (Leader, Co-leader, Elder...)\n"
+                "   - Role na míru podle počtu pohárků, TH level, Liga\n"
+                "   - Přezdívka na Discord serveru nastavena na herní jméno"
+                "   - Přístup ke všem sekcím serveru"
+            ),
+            inline=False
+        )
+
+        # Sekce pro návštěvníky
+        embed.add_field(
+            name="🔹 Jsi návštěvník?",
+            value=(
+                "I pro tebe máme omezený přístup(někdy):\n"
+                "- Můžeš pokecat v obecných chatech\n"
+                "- Podívat se na pravidla\n"
+                "- Případně se připojit do klanu a projít plnou verifikací"
+            ),
+            inline=False
+        )
+
+        # Sekce s výhodami serveru
+        embed.add_field(
+            name="📊 Co všechno zde najdeš?",
+            value=(
+                f"- Přehledné statistiky o Clan War v {interaction.guild.get_channel(1366835944174391379).mention}\n"
+                f"   - Aktuální Clan War útoky a obrany v {interaction.guild.get_channel(1366835971395686554).mention}\n"
+                f"- Detaily o Clan Capital v {interaction.guild.get_channel(1370467834932756600).mention}\n"
+                f"- Herní eventy v {interaction.guild.get_channel(1367054076688339053).mention}\n"
+                f"- Místo pro obecný pokec v {interaction.guild.get_channel(1370722795826450452).mention}\n"
+                "- Tipy a triky jak hrát lépe\n"
+                "- A mnohem více!"
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text="Těšíme se na tebe v našem klanu i na Discordu!")
+
+        await interaction.response.send_message("Vítej zpráva odeslána", ephemeral=True, delete_after=1)
         await interaction.channel.send(embed=embed)
