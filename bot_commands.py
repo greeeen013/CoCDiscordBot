@@ -144,12 +144,14 @@ async def setup_commands(bot):
         embed = discord.Embed(
             title="✅ Ověření účtu pro klan Czech Heroes",
             description=(
-                "**Klikni na tlačítko níže a ověř si svůj účet!**\n\n"
-                "- ověřování je dělané jen pro členy klanu **Czech Heroes**"
-                "- Po kliknutí zadáš své jméno nebo #tag.\n"
-                "- Budeš proveden procesem ověření tvého účtu kde jen vybereš equipment na hrdinu.\n"
-                "- Pokud jsi již ověřený, nebudeš moci ověřit znovu.\n"
-                f"- Ověření je možné pouze, pokud je bot online: <@1363529470778146876>\n"
+                "- Klikni na tlačítko níže a ověř svůj účet!\n"
+                "- Ověřování je jen pro členy klanu Czech Heroes\n"
+                f"- Nezapomeň si nejprve přečíst pravidla: {interaction.guild.get_channel(1366000196991062086).mention}\n"
+                "- Discord účet bude propojen s Clash of Clans účtem\n"
+                "- Po kliknutí zadáš své jméno nebo #tag\n"
+                "- Provedeš ověření výběrem equipmentu na hrdinu\n"
+                "   - Pokud jsi již ověřený, nelze ověřit znovu\n"
+                f"   - Bot musí být online: <@1363529470778146876>\n"
             ),
             color=discord.Color.green()
         )
