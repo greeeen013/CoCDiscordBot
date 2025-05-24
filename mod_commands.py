@@ -194,6 +194,7 @@ async def setup_mod_commands(bot):
                 ephemeral=True
             )
             print(f"❌ [slash/pridej_varovani] {e}")
+
     @bot.tree.command(
         name="vypis_varovani",
         description="Vypíše všechna varování (jen pro tebe)",
@@ -207,22 +208,32 @@ async def setup_mod_commands(bot):
             )
             return
 
-        # defer – dá nám víc než 3 s na odpověď
         await interaction.response.defer(ephemeral=True)
 
+        # Získání varování a propojení s databází hráčů
         rows = fetch_warnings()
+        all_links = get_all_links()  # {discord_id: (coc_tag, coc_name)}
 
         if not rows:
             await interaction.followup.send("😊 Nenalezeno žádné varování.", ephemeral=True)
             return
 
-        # sestavíme text + chunkujeme pod 2000 znaků
+        # Sestavení seznamu s jmény
         header = "🔶 **Seznam varování**\n"
-        lines = [f"{i}. {tag} {dt} {reason}"
-                 for i, (tag, dt, reason) in enumerate(rows, 1)]
+        lines = []
+
+        for i, (tag, dt, reason) in enumerate(rows, 1):
+            # Najdeme jméno podle tagu v propojeních
+            coc_name = next(
+                (name for _, (t, name) in all_links.items() if t == tag),
+                "Neznámý hráč"
+            )
+            lines.append(f"{i}. {tag} ({coc_name}) | {dt} | {reason}")
+
         msg = header + "\n".join(lines)
 
-        for start in range(0, len(msg), 1990):  # 1 990 = malá rezerva
+        # Odeslání po částech
+        for start in range(0, len(msg), 1990):
             await interaction.followup.send(
                 msg[start: start + 1990], ephemeral=True
             )
