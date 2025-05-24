@@ -355,9 +355,9 @@ class WarningReviewView(View):
             await interaction.message.delete()
 
             # Sestav základní zprávu
-            tag_line = f"**{self.coc_tag}**"
+            tag_line = f"{self.coc_tag}"
             if self.member_name:
-                tag_line += f" ({self.member_name})"
+                tag_line += f" (**{self.member_name}**)"
 
             msg = (
                 f"✅ {interaction.user.mention} potvrdil varování pro {tag_line}\n"
@@ -402,9 +402,14 @@ class WarningReviewView(View):
     async def reject(self, interaction: discord.Interaction, button: Button):
         await interaction.message.delete()
 
+        # Sestav základní zprávu
+        tag_line = f"{self.coc_tag}"
+        if self.member_name:
+            tag_line += f" (**{self.member_name}**)"
+
         log_channel = interaction.channel
         await log_channel.send(
-            f"❌ {interaction.user.mention} zamítl varování pro **{self.coc_tag}**\n"
+            f"❌ {interaction.user.mention} zamítl varování pro {tag_line}\n"
             f"📆 {self.date_time}\n📝 {self.reason}"
         )
 
