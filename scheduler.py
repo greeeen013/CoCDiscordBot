@@ -127,58 +127,39 @@ def resume_hourly_update():
 async def verification_check_loop(bot, player_tag, user, verification_channel, config):
     from verification import process_verification, end_verification
 
-    print(f"🚀 [scheduler] Zahajuji ověřování hráče {user} s tagem {player_tag}.")
-
+    print(f"🚀 Zahajuji ověřování hráče {user} s tagem {player_tag}")
     pause_hourly_update()
 
-    # === První pull ===
-    player_data = await fetch_player_data(player_tag, config)
-    print(f"📥 [scheduler] Načítám data hráče {player_tag}...")
-
-    if not player_data:
-        await verification_channel.send("❌ Chyba při načítání dat hráče.")
-        print(f"❌ [scheduler] Chyba při fetchnutí dat pro {user}.")
-        await end_verification(user, verification_channel)
-        resume_hourly_update()
-        return
-
-    selected_item = await process_verification(bot, player_data, user, verification_channel)
-
-    if not selected_item:
-        print(f"❌ [scheduler] Nepodařilo se vybrat vybavení pro hráče {user}.")
-        await end_verification(user, verification_channel)
-        resume_hourly_update()
-        return
-
-    # === Další pull každé 2 minuty ===
-    tries = 0
-    while tries < 4:
-        await asyncio.sleep(300)  # 5 minuty
-        tries += 1
-
-        print(f"🔄 [scheduler] zahajuji stahování data pro hráče {user}")
+    try:
         player_data = await fetch_player_data(player_tag, config)
+        if not player_data:
+            raise ValueError("Nepodařilo se načíst data hráče")
 
-        print(f"🔄 [scheduler] Pokus {tries}/6 - ověřuji hráče {user}...")
-        if player_data:
-            print(f"🔄 [scheduler] volám funkci process_verification pro hráče {user}...")
+        selected_item = await process_verification(bot, player_data, user, verification_channel)
+        if not selected_item:
+            raise ValueError("Nelze vybrat vybavení pro ověření")
+
+        # Hlavní smyčka ověřování
+        for try_num in range(1, 7):  # 6 pokusů
+            await asyncio.sleep(300)
+
+            player_data = await fetch_player_data(player_tag, config)
+            if not player_data:
+                continue
+
             result = await process_verification(bot, player_data, user, verification_channel, selected_item)
             if result == "verified":
-                print(f"🏁 [scheduler] Ověření hráče {user} dokončeno úspěšně.")
-                await end_verification(user, verification_channel)
-                resume_hourly_update()
-                return
-        else:
-            print(f"❌ [scheduler] Chyba při načítání dat hráče {player_tag} - pokus {tries}/6.")
-            await verification_channel.send("❌ Chyba při načítání dat hráče.")
-            continue
+                print(f"✅ Hráč {user} úspěšně ověřen")
+                return  # Ukončí funkci, end_verification se zavolá v succesful_verification
 
-    # Pokud po 6 pokusech (12 minut) se neověří
-    # tak
-    await end_verification(user, verification_channel) # zavolá funkci pro ukončení ověření
-    await verification_channel.send("❌ Nepodařilo se ověřit během časového limitu. Zkus to prosím znovu.") # pošle zprávu do kanálu
-    main_channel = verification_channel.guild.get_channel(1365437738467459265) # získá hlavní kanál
-    await main_channel.set_permissions(user, overwrite=None)  # Vrátíme defaultní práva
-    print(f"🗑️ [verification] {user} se neověřil takže místnost {verification_channel.name} po ukončené verifikaci byla smazána.") # vytiskne zprávu do konzole
-    resume_hourly_update() # obnoví hodinový update
+        # Timeout po 6 pokusech
+        await verification_channel.send("❌ Časový limit pro ověření vypršel")
+        raise TimeoutError("Vypršel časový limit pro ověření")
+
+    except Exception as e:
+        print(f"❌ Chyba při ověřování {user}: {e}")
+    finally:
+        # Vždy uklidíme, i když dojde k chybě
+        await end_verification(user, verification_channel)
+        resume_hourly_update()
 

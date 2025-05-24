@@ -55,9 +55,19 @@ async def start_verification_permission(interaction, player, config):
     guild = interaction.guild
     author = interaction.user
 
-    main_channel = guild.get_channel(VERIFICATION_CHANNEL_ID) # Najdeme hlavní verifikační kanál
+    # Najdeme verifikační roli
+    verification_role = guild.get_role(1372873720254955540)
+    if not verification_role:
+        print("❌ Verifikační role nebyla nalezena!")
+        return
 
-    await main_channel.set_permissions(author, read_messages=False) # Odebrání práva číst zprávy v hlavním kanálu
+    # Přidáme uživateli verifikační roli
+    try:
+        await author.add_roles(verification_role)
+        print(f"✅ Uživateli {author.display_name} byla přidána verifikační role")
+    except Exception as e:
+        print(f"❌ Chyba při přidávání role: {e}")
+        return
 
     overwrites = { # Vytvoření nové místnosti (textového kanálu)
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -80,15 +90,42 @@ def start_verification_checker(bot, player_tag, user, verification_channel, conf
     verification_tasks[user.id] = bot.loop.create_task(
         verification_check_loop(bot, player_tag, user, verification_channel, config)
     )
+
+
 async def end_verification(user, verification_channel):
     """
-    Obnoví práva v hlavním kanálu a smaže verifikační místnost.
+    Bezpečně ukončí verifikaci a smaže kanál
     """
+    if not verification_channel:
+        print(f"❌ [end_verification] Kanál pro {user} již neexistuje")
+        return
 
-    await asyncio.sleep(5)
-    await verification_channel.send(f"🗑️ místnost pro {user} bude automaticky smazána za 5 sekund...")
-    await asyncio.sleep(5)
-    await verification_channel.delete()
+    try:
+        # Odebrání verifikační role
+        verification_role = verification_channel.guild.get_role(1372873720254955540)
+        if verification_role:
+            await user.remove_roles(verification_role)
+            print(f"✅ [end_verification] Uživateli {user} byla odebrána verifikační role")
+        else:
+            print(f"❌ [end_verification] Verifikační role nebyla nalezena")
+
+        # Oznámení před smazáním
+        await verification_channel.send("🗑️ Tento kanál bude smazán za 5 sekund...")
+        await asyncio.sleep(5)
+
+        # Kontrola existence kanálu před smazáním
+        if verification_channel in user.guild.channels:
+            await verification_channel.delete()
+            print(f"✅ [end_verification] Kanál pro {user} úspěšně smazán")
+        else:
+            print(f"⚠️ [end_verification] Kanál pro {user} již byl smazán")
+
+    except discord.Forbidden:
+        print(f"❌ [end_verification] Nemám práva smazat kanál nebo odebrat roli pro {user}")
+    except discord.NotFound:
+        print(f"⚠️ [end_verification] Kanál pro {user} nebo role již neexistuje")
+    except Exception as e:
+        print(f"❌ [end_verification] Neočekávaná chyba u {user}: {e}")
 
 
 async def succesful_verification(bot, user, verification_channel, selected_item, coc_name, coc_tag):
