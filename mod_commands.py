@@ -483,3 +483,105 @@ async def setup_mod_commands(bot):
             lines.append(f"- <@{discord_id}> → **{name}** (`{tag}`)")
         # zpráva jen volajícímu, aby se zbytečně nespamovalo
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    @bot.tree.command(name="pravidla_discord", description="Zobrazí pravidla Discord serveru", guild=bot.guild_object)
+    async def pravidla_discord(interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="📜 Pravidla Discord serveru",
+            description="Pravidla pro všechny členy našeho Discord serveru:",
+            color=discord.Color.blue()
+        )
+
+        embed.add_field(
+            name="1. Chování a komunikace",
+            value="• Respektujte všechny členy serveru\n"
+                  "• Žádné urážky, rasismus, sexismu nebo jiná forma diskriminace\n"
+                  "• Mluvte výhradně česky\n"
+                  "• Žádné spammování nebo floodování zprávami\n"
+                  "• Dodržujte témata kanálů",
+            inline=False
+        )
+
+        embed.add_field(
+            name="2. Sdílení obsahu",
+            value="• Odkazy smíte posílat pouze pokud se týkají kontextu konverzace\n"
+                  "• Zakázány jsou náhodné Discord invite nebo reklamy\n"
+                  "• NSFW obsah je striktně zakázán",
+            inline=False
+        )
+
+        embed.add_field(
+            name="3. Role a oprávnění",
+            value="• Nežádejte o vyšší role - ty se přidělují podle postavení v klanu\n"
+                  "• Zneužívání rolí nebo botů bude potrestáno\n"
+                  "• Moderátoři mají vždy pravdu",
+            inline=False
+        )
+
+        embed.add_field(
+            name="4. Hlasové kanály",
+            value="• Respektujte toho, kdo mluví\n"
+                  "• Žádné rušení hlukem v pozadí\n"
+                  "• Hudba pouze v určených kanálech",
+            inline=False
+        )
+
+        embed.set_footer(text="Porušení pravidel může vést k mute, kick nebo banu, podle závažnosti přestupku")
+
+        await interaction.response.send_message("Pravidla zobrazena", ephemeral=True, delete_after=1)
+        await interaction.channel.send(embed=embed)
+
+    @bot.tree.command(name="pravidla_clan", description="Zobrazí pravidla herního klanu", guild=bot.guild_object)
+    async def pravidla_clan(interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="⚔️ Pravidla Klanu Czech Heroes",
+            description="Pravidla pro všechny členy našeho herního klanu:",
+            color=discord.Color.gold()
+        )
+
+        # Sekce obecná pravidla
+        embed.add_field(
+            name="🔹 Obecná pravidla",
+            value="• Minimální aktivita 3 dny - po delší neaktivitě hrozí kick\n"
+                  "• Clan Games: od každého očekáváme minimálně 1000 bodů\n"
+                  "• Clan Capital: povinné využít všech 6 útoků\n"
+                  "• Donate: darujte co to jde, ideálně nemít donate na 0",
+            inline=False
+        )
+
+        # Výrazně zvýrazněná sekce Clan War
+        embed.add_field(
+            name="⚔️ CLAN WAR - NEJDŮLEŽITĚJŠÍ PRAVIDLA",
+            value="```diff\n"
+                  "+ 1. útok: VŽDY MIRROR (stejné číslo)\n"
+                  "+ Ideálně odehrát před 5. hodinou do konce války\n\n"
+                  "+ 2. útok: oprava nějakého cizího útoku\n"
+                  "+ Nebo na koho chcete, pokud zbývá méně než 5h do konce CW\n\n"
+                  "! Neodehrání útoku = VAROVÁNÍ\n"
+                  "```",
+            inline=False
+        )
+
+        # Sekce přihlašování do waru
+        embed.add_field(
+            name="📝 Přihlašování do Clan War",
+            value="• Pár hodin před začátkem války pošlu \"Clan War Sign-Up\"\n"
+                  "• Palec nahoru = 100% účast (musíš dodržet pravidla)\n"
+                  "• Palec dolů = 100% nebudeš ve válce\n"
+                  "• Nereaguješ + zelený štít = možná účast (doplňujeme počet)\n"
+                  "• Nereaguješ + červený štít = nebudeš ve válce",
+            inline=False
+        )
+
+        embed.add_field(
+            name="ℹ️ Poznámky",
+            value="• Války vždy začínají ve večerních hodinách (17-24)\n"
+                  "• Pravidla se mohou v budoucnu změnit\n"
+                  "• Kicknutí členové mohou dostat pozvánku zpátky pokud vím že byly aktivní",
+            inline=False
+        )
+
+        embed.set_footer(text="Po 3 varováních hrozí kick z klanu")
+
+        await interaction.response.send_message("Pravidla zobrazena", ephemeral=True, delete_after=1)
+        await interaction.channel.send(embed=embed)
