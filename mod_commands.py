@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.utils import get
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from api_handler import fetch_current_war
 from clan_war import ClanWarHandler
@@ -300,38 +300,57 @@ async def setup_mod_commands(bot):
             )
             return
 
-        if state == "warEnded":
-            missing = [
-                m for m in war_data["clan"]["members"]
-                if not m.get("attacks")
-            ]
-            if not missing:
-                await interaction.followup.send(
-                    "🏁 Válka již skončila. Všichni členové klanu provedli své útoky.",
-                    ephemeral=True
-                )
-                return
+        # Společná funkce pro formátování výpisu hráčů
+        async def format_missing_players(members, prefix):
+            if not members:
+                return f"{prefix} Všichni členové klanu již provedli své útoky."
 
-            # seznam jmen/mentionů s mezerou i za posledním
-            names = []
-            for m in missing:
+            # Odeslání úvodní zprávy
+            await interaction.followup.send(prefix, ephemeral=True)
+
+            # Příprava a odesílání hráčů po skupinách
+            batch = []
+            for m in members:
                 tag = m["tag"]
                 name = m["name"].replace('_', r'\_').replace('*', r'\*')
                 mention = await clan_war_handler._get_discord_mention(tag)
-                names.append(mention if mention else f"@{name}")
-            msg = "🏁 Válka již skončila. Útok neprovedli: " + " ".join(names) + " "
-            await interaction.followup.send(msg, ephemeral=True)
+                batch.append(mention if mention else f"@{name}")
+
+                # Odeslat každých 5 hráčů
+                if len(batch) >= 5:
+                    await interaction.followup.send(
+                        " ".join(batch) + " .",
+                        ephemeral=True
+                    )
+                    batch = []
+
+            # Odeslat zbylé hráče (méně než 5)
+            if batch:
+                await interaction.followup.send(
+                    " ".join(batch) + " .",
+                    ephemeral=True
+                )
+
+        if state == "warEnded":
+            missing = [m for m in war_data["clan"]["members"] if not m.get("attacks")]
+            await format_missing_players(missing, "🏁 Válka již skončila. Útok neprovedli:")
             return
 
         # state == "inWar"
-        result = await clan_war_handler.remind_missing_attacks(
-            war_data,
-            send_warning=False  # jen vrátí text, nic nepingá
-        )
-        await interaction.followup.send(
-            result or "❌ Nelze získat informace o válce.",
-            ephemeral=True
-        )
+        missing = [m for m in war_data["clan"]["members"] if
+                   len(m.get("attacks", [])) < war_data.get("attacksPerMember", 1)]
+
+        # Získání zbývajícího času války
+        end_time = clan_war_handler._parse_coc_time(war_data.get('endTime', ''))
+        if end_time:
+            remaining = end_time - datetime.now(timezone.utc)
+            hours = remaining.seconds // 3600
+            minutes = (remaining.seconds % 3600) // 60
+            time_info = f" (zbývá {hours}h {minutes}m)"
+        else:
+            time_info = ""
+
+        await format_missing_players(missing, f"⚔️ Probíhá válka{time_info}. Útok neprovedli:")
 
         # ------------------------------------------------------------------
         # /propoj_ucet  – přidá (nebo přepíše) propojení Discord ↔ CoC účtu
