@@ -191,20 +191,23 @@ def get_all_links():
     """
     Vrátí záznam propojení mezi Discord ID a CoC účtem.
     """
-    conn = sqlite3.connect("coc_data_info.sqlite3")
-    cursor = conn.cursor()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
 
-    cursor.execute("SELECT discord_name, coc_tag, coc_name FROM coc_discord_links")
-    rows = cursor.fetchall()
+            cursor.execute("SELECT discord_name, coc_tag, coc_name FROM coc_discord_links")
+            rows = cursor.fetchall()
 
-    conn.close()
+            conn.close()
 
-    # Předěláme správně na formát {discord_id: (coc_tag, coc_name)}
-    result = {}
-    for discord_id, coc_tag, coc_name in rows:
-        result[int(discord_id)] = (coc_tag, coc_name)
+            # Předěláme správně na formát {discord_id: (coc_tag, coc_name)}
+            result = {}
+            for discord_id, coc_tag, coc_name in rows:
+                result[int(discord_id)] = (coc_tag, coc_name)
 
-    return result
+            return result
+    except Exception as e:
+        print(f"❌ [database] Chyba při ukládání propojení: {e}")
 
 # === Přidání propojení mezi Discord jménem a CoC účtem ===
 def add_coc_link(discord_name: str, coc_tag: str, coc_name: str):
