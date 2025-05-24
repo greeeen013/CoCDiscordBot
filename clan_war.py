@@ -169,7 +169,7 @@ class ClanWarHandler:
                             mentions_list.append(discord_mention or f"@{name}")
 
                         for i in range(0, len(mentions_list), 5):
-                            await ping_channel.send(" ".join(mentions_list[i:i + 5]) + " ")
+                            await ping_channel.send(" ".join(mentions_list[i:i + 5]) + " .")
 
                         # Uložení stavu, že upozornění bylo odesláno
                         room_storage.set(key, True)
@@ -204,7 +204,7 @@ class ClanWarHandler:
                 discord_mention = await self._get_discord_mention(tag)
                 mentions_output.append(discord_mention or f"@{name}")
             return f"Do konce války zbývá {time_remaining_str}. Útok dosud neprovedli: " + " ".join(
-                mentions_output) + " "
+                mentions_output) + " ."
 
     async def process_war_data(self, war_data: dict):
         """Zpracuje data o válce a aktualizuje Discord"""
@@ -242,7 +242,7 @@ class ClanWarHandler:
                     )
 
                 for i in range(0, len(mentions), 5):
-                    await war_end_channel.send(" ".join(mentions[i:i + 5]))
+                    await war_end_channel.send(" ".join(mentions[i:i + 5]) + " .")
 
         # Reset událostí při nové válce
         if self._last_state is not None and self._last_state != 'preparation' and state == 'preparation':
