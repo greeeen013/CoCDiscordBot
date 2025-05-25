@@ -172,7 +172,7 @@ async def welcome_on_server_message(bot, user):
 
     welcome_channel_id = 1365768783083339878 # ID uvítací místnosti
     rules_channel_id = 1366000196991062086 # ID kanálu s pravidly
-    admin_user_id = 317724566426222592  # Tvoje Discord ID pro kontakt
+    general_channel_id = 1370722795826450452 # ID obecné místnosti
 
     channel = bot.get_channel(welcome_channel_id)
 
@@ -181,23 +181,23 @@ async def welcome_on_server_message(bot, user):
         return
 
     embed = discord.Embed(
-        title="👋 Vítej na serveru našeho klanu Czech Heroes!",
+        title="👋 Vítej mezi ověřenými serveru našeho klanu Czech Heroes!",
         description=f"{user.mention}, vítej mezi námi!",
         color=discord.Color.blue()
     )
 
     embed.add_field(
-        name="📜 První kroky:",
+        name="📌 Co dál?",
         value=(
-            f"• Přečti si prosím [**pravidla serveru**](https://discord.com/channels/{channel.guild.id}/{rules_channel_id}).\n"
-            "• Respektuj ostatní členy a chovej se slušně.\n"
-            "• A užívej hlavně zábavy.\n"
-            f"• Pokud si s něčím nebudeš vědět rady, **napiš zprávu do DMs <@{admin_user_id}>**. 💬"
+            f"🔍 Seznam se s pravidly v: <#{rules_channel_id}>\n"
+            f"💬 Přidej se do konverzace v obecných chatech: <#{general_channel_id}>\n"
+            "🎯 Prozkoumej všechny mopžnosti serveru\n"
+            "👥 Poznej ostatní hráče v komunitě"
         ),
         inline=False
     )
 
-    embed.set_footer(text="⚔️ Klan Czech Heroes ti přeje příjemnou zábavu!")
+    embed.set_footer(text="⚔️ Czech Heroes | Přejme příjemnou zábavu a úspěšné útoky!")
 
     await channel.send(embed=embed)
     print(f"ℹ️ [verification] Do welcome kanálu byla odeslaná welcome zpráva. pro {user}")
