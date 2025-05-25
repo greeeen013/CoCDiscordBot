@@ -1,3 +1,6 @@
+import asyncio
+from pathlib import Path
+
 import discord
 from discord import app_commands
 from discord.utils import get
@@ -685,3 +688,117 @@ async def setup_mod_commands(bot):
 
         await interaction.response.send_message("Vítej zpráva odeslána", ephemeral=True, delete_after=1)
         await interaction.channel.send(embed=embed)
+
+    @bot.tree.command(
+        name="vypis_log",
+        description="Vypíše poslední řádky z log souboru (pouze pro administrátory)",
+        guild=bot.guild_object
+    )
+    @app_commands.describe(
+        pocet_radku="Kolik posledních řádků zobrazit (default: 50, max: 500)"
+    )
+    async def vypis_log(interaction: discord.Interaction, pocet_radku: int = 50):
+        if not interaction.user.guild_permissions.administrator:
+            try:
+                await interaction.response.send_message(
+                    "❌ Tento příkaz může použít pouze administrátor.",
+                    ephemeral=True
+                )
+                await asyncio.sleep(300)  # 5 minut
+                await interaction.delete_original_response()
+            except discord.NotFound:
+                pass
+            except Exception as e:
+                print(f"Chyba při mazání zprávy: {e}")
+            return
+
+        pocet_radku = min(max(pocet_radku, 1), 500)
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        log_file = Path(__file__).parent / "CoCDiscordBot.log"
+        messages_to_delete = []
+
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            if not lines:
+                msg = await interaction.followup.send(
+                    "ℹ️ Log soubor je prázdný.",
+                    ephemeral=True
+                )
+                messages_to_delete.append(msg)
+            else:
+                last_lines = lines[-pocet_radku:]
+
+                # Příprava zpráv po celých řádcích
+                current_chunk = []
+                current_length = 0
+
+                for line in last_lines:
+                    line_length = len(line)
+
+                    # Pokud by přidání řádku přesáhlo limit, odešleme aktuální chunk
+                    if current_length + line_length > 1900:
+                        if current_chunk:  # Odešleme co máme
+                            msg = await interaction.followup.send(
+                                f"```\n{''.join(current_chunk)}\n```",
+                                ephemeral=True
+                            )
+                            messages_to_delete.append(msg)
+                            current_chunk = []
+                            current_length = 0
+
+                        # Pokud je řádek sám o sobě příliš dlouhý, rozdělíme ho
+                        if line_length > 1900:
+                            parts = [line[i:i + 1900] for i in range(0, len(line), 1900)]
+                            for part in parts[:-1]:
+                                msg = await interaction.followup.send(
+                                    f"```\n{part}\n```",
+                                    ephemeral=True
+                                )
+                                messages_to_delete.append(msg)
+                            line = parts[-1]
+                            line_length = len(line)
+
+                    current_chunk.append(line)
+                    current_length += line_length
+
+                # Odeslání posledního chunku
+                if current_chunk:
+                    msg = await interaction.followup.send(
+                        f"```\n{''.join(current_chunk)}\n```",
+                        ephemeral=True
+                    )
+                    messages_to_delete.append(msg)
+
+        except FileNotFoundError:
+            msg = await interaction.followup.send(
+                f"❌ Log soubor '{log_file}' nebyl nalezen.",
+                ephemeral=True
+            )
+            messages_to_delete.append(msg)
+        except Exception as e:
+            msg = await interaction.followup.send(
+                f"❌ Chyba při čtení log souboru: {e}",
+                ephemeral=True
+            )
+            messages_to_delete.append(msg)
+
+        # Mazání zpráv po 5 minutách s ošetřením chyb
+        await asyncio.sleep(300)  # 5 minut
+        for msg in messages_to_delete:
+            try:
+                await msg.delete()
+            except discord.NotFound:
+                pass
+            except Exception as e:
+                print(f"Chyba při mazání zprávy: {e}")
+
+        try:
+            await interaction.delete_original_response()
+        except discord.NotFound:
+            pass
+        except Exception as e:
+            print(f"Chyba při mazání původní odpovědi: {e}")
