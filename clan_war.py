@@ -182,15 +182,19 @@ class ClanWarHandler:
         time_remaining_str = self._format_remaining_time(remaining_seconds)
         if not missing_members:
             return f"Do konce války zbývá {time_remaining_str}. ✅ Všichni členové klanu již provedli své útoky."
-        else:
-            mentions_output = []
-            for m in missing_members:
-                tag = m.get("tag")
-                name = self._escape_name(m.get("name", "Unknown"))
-                discord_mention = await self._get_discord_mention(tag)
-                mentions_output.append(discord_mention or f"@{name}")
-            return f"Do konce války zbývá {time_remaining_str}. Útok dosud neprovedli: " + " ".join(
-                mentions_output) + " "
+
+        mentions_output = []
+        for m in missing_members:
+            tag = m.get("tag")
+            name = self._escape_name(m.get("name", "Unknown"))
+            discord_mention = await self._get_discord_mention(tag)
+
+            if discord_mention:
+                mentions_output.append(discord_mention)
+            else:
+                mentions_output.append(f"@{name} (ID nenalezeno)")
+
+        return f"Do konce války zbývá {time_remaining_str}. Útok dosud neprovedli: " + " ".join(mentions_output)
 
         # Sestavení výstupní zprávy
         time_remaining_str = format_remaining_time(remaining_seconds)
@@ -514,7 +518,7 @@ class ClanWarHandler:
                     attacker.get("mapPosition") == defender.get("mapPosition") and
                     attack.get("destructionPercentage", 0) == 100 and
                     remaining_hours >= 5):
-                praise_channel = self.bot.get_channel(1371170358056452176)
+                praise_channel = self.bot.get_channel(1371170358056452176) # pošle do místnosti s pochvaly
                 discord_mention = await self._get_discord_mention(attacker.get("tag"))
                 name_or_mention = discord_mention or f"@{attacker.get('name', 'neznámý')}"
                 if praise_channel:
@@ -552,20 +556,39 @@ class ClanWarHandler:
         return None
 
     async def _get_discord_mention(self, coc_tag: str) -> Optional[str]:
-        """Získá Discord mention propojeného uživatele (s cache)"""
+        """Získá Discord ID nebo mention propojeného uživatele"""
         if not coc_tag:
             return None
 
-        if not hasattr(self, '_mention_cache'):
-            self._mention_cache = {}
-            links = get_all_links()
-            guild = self.bot.get_guild(self.config['GUILD_ID'])
-            for discord_id, (tag, _) in links.items():
-                member = guild.get_member(discord_id)
-                if member:
-                    self._mention_cache[tag.upper()] = member.mention
+        # Normalizace tagu
+        normalized_tag = coc_tag.upper().strip()
+        if not normalized_tag.startswith("#"):
+            normalized_tag = "#" + normalized_tag
 
-        return self._mention_cache.get(coc_tag.upper())
+        # 1. Najít Discord ID v databázi
+        discord_id = None
+        links = get_all_links()  # {discord_id: (coc_tag, coc_name)}
+
+        for did, (tag, _) in links.items():
+            if tag and tag.upper().strip() == normalized_tag:
+                discord_id = did
+                break
+
+        if not discord_id:
+            return None
+
+        # 2. Pokusit se najít uživatele na serveru
+        guild = self.bot.get_guild(self.config['GUILD_ID'])
+        if not guild:
+            print("❌ Guild nebyla nalezena")
+            return str(discord_id)  # Vrátíme alespoň ID
+
+        member = guild.get_member(int(discord_id))
+        if member:
+            return member.mention  # Vrátíme mention pokud je na serveru
+        else:
+            print(f"⚠️ Uživatel s ID {discord_id} není na serveru")
+            return str(discord_id)  # Vrátíme alespoň ID
 
     def _parse_coc_time(self, time_str: str) -> Optional[datetime]:
         """Parsuje čas z API CoC (s cache)"""
