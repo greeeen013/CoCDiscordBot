@@ -353,7 +353,7 @@ class ClanWarHandler:
                         "{index}. {emoji} {name} ({attacks}/{max_attacks})".format(
                             index=idx,
                             emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
-                            name=self._escape_name(m.get('name', 'Unknown')),
+                            name=(m.get('name', 'Unknown')),
                             attacks=len(m.get('attacks', [])),
                             max_attacks=war_data.get('attacksPerMember', 2)
                         )
