@@ -451,10 +451,10 @@ class ClanWarHandler:
         embed = discord.Embed(color=embed_color)
 
         # Escape jména
-        attacker_name = self._escape_name(attacker.get('name', 'Unknown'))
-        defender_name = self._escape_name(defender.get('name', 'Unknown'))
-        clan_name = self._escape_name(war_data.get('clan', {}).get('name', 'Náš klan'))
-        opponent_name = self._escape_name(war_data.get('opponent', {}).get('name', 'Protivník'))
+        attacker_name = (attacker.get('name', 'Unknown'))
+        defender_name = (defender.get('name', 'Unknown'))
+        clan_name = (war_data.get('clan', {}).get('name', 'Náš klan'))
+        opponent_name = (war_data.get('opponent', {}).get('name', 'Protivník'))
 
         # Určení pozic
         left_pos = attacker.get("mapPosition") if is_our_attack else defender.get("mapPosition")
