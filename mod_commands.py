@@ -257,16 +257,17 @@ async def setup_mod_commands(bot):
 
     @bot.tree.command(
         name="kdo_neodehral",
-        description="Vypíše hráče, kteří dosud neodehráli útok ve válce",
+        description="Vypíše hráče, kteří dosud neodehráli útok ve válce.",
         guild=bot.guild_object
     )
-    async def kdo_neodehral(interaction: discord.Interaction):
+    async def kdo_neodehral(interaction: discord.Interaction, zbyva: bool = False):
         # ✅ 1) kontrola oprávnění
         if not interaction.user.guild_permissions.manage_messages:
-            await interaction.response.send_message(
+            msg = await interaction.response.send_message(
                 "❌ Tento příkaz může použít pouze moderátor.",
                 ephemeral=True
             )
+            asyncio.create_task(delete_after_timeout(msg))
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -280,39 +281,49 @@ async def setup_mod_commands(bot):
         # ✅ 3) načtení aktuálního stavu války
         war_data = await fetch_current_war(bot.clan_tag, bot.config)
         if not war_data or war_data.get("state") is None:
-            await interaction.followup.send(
+            msg = await interaction.followup.send(
                 "❌ Nepodařilo se získat data o aktuální klanové válce.",
                 ephemeral=True
             )
+            asyncio.create_task(delete_after_timeout(msg))
             return
 
         state = war_data["state"]
 
         # ✅ 4) větvení podle stavu války
         if state == "notInWar":
-            await interaction.followup.send(
+            msg = await interaction.followup.send(
                 "⚔️ Momentálně neprobíhá žádná klanová válka.",
                 ephemeral=True
             )
+            asyncio.create_task(delete_after_timeout(msg))
             return
 
         if state == "preparation":
-            await interaction.followup.send(
+            msg = await interaction.followup.send(
                 "🛡️ Válka je ve fázi přípravy. Útoky zatím nelze provádět.",
                 ephemeral=True
             )
+            asyncio.create_task(delete_after_timeout(msg))
             return
 
         # Společná funkce pro formátování výpisu hráčů
         async def format_missing_players(members, prefix):
             if not members:
-                return f"{prefix} Všichni členové klanu již provedli své útoky."
+                msg = await interaction.followup.send(
+                    f"{prefix} Všichni členové klanu již provedli své útoky.",
+                    ephemeral=True
+                )
+                asyncio.create_task(delete_after_timeout(msg))
+                return
 
             # Odeslání úvodní zprávy
-            await interaction.followup.send(prefix, ephemeral=True)
+            prefix_msg = await interaction.followup.send(prefix, ephemeral=True)
+            asyncio.create_task(delete_after_timeout(prefix_msg))
 
             # Příprava a odesílání hráčů po skupinách
             batch = []
+            messages_to_delete = []
             for m in members:
                 tag = m["tag"]
                 name = m["name"].replace('_', r'\_').replace('*', r'\*')
@@ -321,27 +332,40 @@ async def setup_mod_commands(bot):
 
                 # Odeslat každých 5 hráčů
                 if len(batch) >= 5:
-                    await interaction.followup.send(
+                    msg = await interaction.followup.send(
                         " ".join(batch) + " .",
                         ephemeral=True
                     )
+                    messages_to_delete.append(msg)
                     batch = []
 
             # Odeslat zbylé hráče (méně než 5)
             if batch:
-                await interaction.followup.send(
+                msg = await interaction.followup.send(
                     " ".join(batch) + " .",
                     ephemeral=True
                 )
+                messages_to_delete.append(msg)
+
+            # Nastavit mazání všech zpráv s hráči
+            for msg in messages_to_delete:
+                asyncio.create_task(delete_after_timeout(msg))
 
         if state == "warEnded":
-            missing = [m for m in war_data["clan"]["members"] if not m.get("attacks")]
+            if zbyva:
+                missing = [m for m in war_data["clan"]["members"] if
+                           len(m.get("attacks", [])) < war_data.get("attacksPerMember", 1)]
+            else:
+                missing = [m for m in war_data["clan"]["members"] if not m.get("attacks")]
             await format_missing_players(missing, "🏁 Válka již skončila. Útok neprovedli:")
             return
 
         # state == "inWar"
-        missing = [m for m in war_data["clan"]["members"] if
-                   len(m.get("attacks", [])) < war_data.get("attacksPerMember", 1)]
+        attacks_per_member = war_data.get("attacksPerMember", 1)
+        if zbyva:
+            missing = [m for m in war_data["clan"]["members"] if len(m.get("attacks", [])) < attacks_per_member]
+        else:
+            missing = [m for m in war_data["clan"]["members"] if len(m.get("attacks", [])) == 0]
 
         # Získání zbývajícího času války
         end_time = clan_war_handler._parse_coc_time(war_data.get('endTime', ''))
@@ -353,7 +377,17 @@ async def setup_mod_commands(bot):
         else:
             time_info = ""
 
-        await format_missing_players(missing, f"⚔️ Probíhá válka{time_info}. Útok neprovedli:")
+        if zbyva:
+            await format_missing_players(missing, f"⚔️ Probíhá válka{time_info}. Hráči s alespoň 1 zbývajícím útokem:")
+        else:
+            await format_missing_players(missing, f"⚔️ Probíhá válka{time_info}. Hráči, kteří neprovedli žádný útok:")
+
+    async def delete_after_timeout(message):
+        await asyncio.sleep(180)  # 3 minuty
+        try:
+            await message.delete()
+        except (discord.NotFound, discord.HTTPException):
+            pass
 
         # ------------------------------------------------------------------
         # /propoj_ucet  – přidá (nebo přepíše) propojení Discord ↔ CoC účtu
