@@ -99,12 +99,16 @@ class GameEventsHandler:
                 except discord.NotFound:
                     print("⚠️ [game_events] Zpráva nenalezena, posílám novou.")
                     self.message_id = None
-                    save_room_id("game_events_message", None)  # <-- Přidejte tento řádek
+                    save_room_id("game_events_message", None)
+                except discord.Forbidden:
+                    print("❌ [game_events] Nemám oprávnění upravit zprávu.")
+                    return
 
+            # Odeslání nové zprávy (pokud není message_id nebo byla smazána)
             msg = await channel.send(embed=embed)
             self.message_id = msg.id
-            save_room_id("game_events_message", msg.id)
-            print("✅ [game_events] Embed odeslán.")
+            save_room_id("game_events_message", msg.id)  # Uloží nové ID
+            print("✅ [game_events] Nový embed odeslán.")
 
         except Exception as e:
             print(f"❌ [game_events] Chyba při odesílání embed zprávy: {e}")
