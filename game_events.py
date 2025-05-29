@@ -99,6 +99,7 @@ class GameEventsHandler:
                 except discord.NotFound:
                     print("⚠️ [game_events] Zpráva nenalezena, posílám novou.")
                     self.message_id = None
+                    save_room_id("game_events_message", None)  # <-- Přidejte tento řádek
 
             msg = await channel.send(embed=embed)
             self.message_id = msg.id
