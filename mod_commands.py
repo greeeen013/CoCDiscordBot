@@ -5,6 +5,7 @@ import discord
 from discord import app_commands
 from discord.utils import get
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from api_handler import fetch_current_war
 from clan_war import ClanWarHandler
@@ -12,11 +13,34 @@ from database import remove_warning, fetch_warnings, notify_single_warning, get_
 
 
 async def setup_mod_commands(bot):
+    # Pomocná funkce pro automatické mazání ephemerálních zpráv
+    async def auto_delete_ephemeral(message: discord.Message | discord.InteractionResponse, delay: int = 180):
+        """Automatically delete ephemeral message after specified delay"""
+        try:
+            await asyncio.sleep(delay)
+            if isinstance(message, discord.InteractionResponse):
+                await message.delete_original_response()
+            else:
+                await message.delete()
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+    async def send_ephemeral(interaction: discord.Interaction, content: str, delete_after: int = 180, **kwargs):
+        """Helper function to send ephemeral messages with auto-delete"""
+        if interaction.response.is_done():
+            msg = await interaction.followup.send(content, ephemeral=True, **kwargs)
+        else:
+            msg = await interaction.response.send_message(content, ephemeral=True, **kwargs)
+
+        if delete_after and delete_after > 0:
+            asyncio.create_task(auto_delete_ephemeral(msg, delete_after))
+        return msg
+
     @bot.tree.command(name="clear", description="Vyčistí kanál nebo zadaný počet zpráv", guild=bot.guild_object)
     @app_commands.describe(pocet="Kolik zpráv smazat (nebo prázdné = kompletní vymazání)")
     async def clear(interaction: discord.Interaction, pocet: int = 0):
         if not interaction.user.guild_permissions.manage_messages:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -33,17 +57,17 @@ async def setup_mod_commands(bot):
                     if len(deleted) < 100:
                         break
 
-            await interaction.followup.send(f"✅ Vymazáno {total_deleted} zpráv v kanálu.", ephemeral=True)
+            await send_ephemeral(interaction, f"✅ Vymazáno {total_deleted} zpráv v kanálu.")
         except discord.Forbidden:
-            await interaction.followup.send("❌ Nemám právo mazat zprávy v tomto kanálu.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Nemám právo mazat zprávy v tomto kanálu.")
         except Exception as e:
-            await interaction.followup.send(f"❌ Došlo k chybě při mazání zpráv: {e}", ephemeral=True)
+            await send_ephemeral(interaction, f"❌ Došlo k chybě při mazání zpráv: {e}")
 
     @bot.tree.command(name="lock", description="Uzamkne kanál pro psaní", guild=bot.guild_object)
     @app_commands.describe(duvod="Důvod pro uzamčení kanálu")
     async def lock(interaction: discord.Interaction, duvod: str = None):
         if not interaction.user.guild_permissions.manage_channels:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         overwrite = interaction.channel.overwrites_for(interaction.guild.default_role)
@@ -52,7 +76,8 @@ async def setup_mod_commands(bot):
 
         embed = discord.Embed(
             title="🔒 Kanál uzamčen",
-            description=f"Moderátor {interaction.user.mention} uzamkl tento kanál." + (f"\n**Důvod:** {duvod}" if duvod else ""),
+            description=f"Moderátor {interaction.user.mention} uzamkl tento kanál." + (
+                f"\n**Důvod:** {duvod}" if duvod else ""),
             color=discord.Color.red()
         )
         await interaction.response.send_message(embed=embed)
@@ -60,7 +85,7 @@ async def setup_mod_commands(bot):
     @bot.tree.command(name="unlock", description="Odemkne kanál pro psaní", guild=bot.guild_object)
     async def unlock(interaction: discord.Interaction):
         if not interaction.user.guild_permissions.manage_channels:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         overwrite = interaction.channel.overwrites_for(interaction.guild.default_role)
@@ -82,7 +107,7 @@ async def setup_mod_commands(bot):
     )
     async def timeout(interaction: discord.Interaction, uzivatel: discord.Member, minuty: int, duvod: str = None):
         if not interaction.user.guild_permissions.moderate_members:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         duration = timedelta(minutes=minuty)
@@ -90,7 +115,8 @@ async def setup_mod_commands(bot):
 
         embed = discord.Embed(
             title="⏳ Uživatel umlčen",
-            description=f"{uzivatel.mention} byl umlčen na {minuty} minut." + (f"\n**Důvod:** {duvod}" if duvod else ""),
+            description=f"{uzivatel.mention} byl umlčen na {minuty} minut." + (
+                f"\n**Důvod:** {duvod}" if duvod else ""),
             color=discord.Color.orange()
         )
         await interaction.response.send_message(embed=embed)
@@ -99,7 +125,7 @@ async def setup_mod_commands(bot):
     @app_commands.describe(uzivatel="Uživatel, kterému chceš zrušit umlčení")
     async def untimeout(interaction: discord.Interaction, uzivatel: discord.Member):
         if not interaction.user.guild_permissions.moderate_members:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         await uzivatel.timeout(None)
@@ -118,7 +144,7 @@ async def setup_mod_commands(bot):
     )
     async def kick(interaction: discord.Interaction, uzivatel: discord.Member, duvod: str = None):
         if not interaction.user.guild_permissions.kick_members:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         await uzivatel.kick(reason=duvod)
@@ -136,11 +162,11 @@ async def setup_mod_commands(bot):
     )
     async def slowmode(interaction: discord.Interaction, sekundy: int):
         if not interaction.user.guild_permissions.manage_channels:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         if sekundy < 0 or sekundy > 21600:
-            await interaction.response.send_message("❌ Slowmode musí být mezi 0 a 21600 sekundami (6 hodin).", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Slowmode musí být mezi 0 a 21600 sekundami (6 hodin).")
             return
 
         await interaction.channel.edit(slowmode_delay=sekundy)
@@ -173,29 +199,19 @@ async def setup_mod_commands(bot):
 
         if date_time:
             try:
-                # Validuj ručně
                 datetime.strptime(date_time, "%d/%m/%Y %H:%M")
             except ValueError:
-                await interaction.followup.send(
-                    "❌ Neplatný formát času. Použij formát `DD/MM/YYYY HH:MM`, např. `14/05/2025 18:30`.",
-                    ephemeral=True
-                )
+                await send_ephemeral(interaction,
+                                     "❌ Neplatný formát času. Použij formát `DD/MM/YYYY HH:MM`, např. `14/05/2025 18:30`.")
                 return
         else:
-            # Automaticky nastav aktuální čas
             date_time = datetime.now().strftime("%d/%m/%Y %H:%M")
 
         try:
             await notify_single_warning(interaction.client, coc_tag, date_time, reason)
-            await interaction.followup.send(
-                f"✅ Návrh varování pro {coc_tag} byl odeslán ke schválení.",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, f"✅ Návrh varování pro {coc_tag} byl odeslán ke schválení.")
         except Exception as e:
-            await interaction.followup.send(
-                f"❌ Chyba při vytváření varování: {e}",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, f"❌ Chyba při vytváření varování: {e}")
             print(f"❌ [slash/pridej_varovani] {e}")
 
     @bot.tree.command(
@@ -204,45 +220,33 @@ async def setup_mod_commands(bot):
         guild=bot.guild_object,
     )
     async def list_warnings_cmd(interaction: discord.Interaction):
-        # kontrola práv
         if not interaction.user.guild_permissions.moderate_members:
-            await interaction.response.send_message(
-                "❌ Tento příkaz může použít pouze moderátor.", ephemeral=True
-            )
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Získání varování a propojení s databází hráčů
         rows = fetch_warnings()
-        all_links = get_all_links()  # {discord_id: (coc_tag, coc_name)}
+        all_links = get_all_links()
 
         if not rows:
-            await interaction.followup.send("😊 Nenalezeno žádné varování.", ephemeral=True)
+            await send_ephemeral(interaction, "😊 Nenalezeno žádné varování.")
             return
 
-        # Sestavení seznamu s jmény
         header = "🔶 **Seznam varování**\n"
         lines = []
 
         for i, (tag, dt, reason) in enumerate(rows, 1):
-            # Najdeme jméno podle tagu v propojeních
-            coc_name = next(
-                (name for _, (t, name) in all_links.items() if t == tag),
-                "Neznámý hráč"
-            )
+            coc_name = next((name for _, (t, name) in all_links.items() if t == tag), "Neznámý hráč")
             lines.append(f"{i}. {tag} ({coc_name}) | {dt} | {reason}")
 
         msg = header + "\n".join(lines)
 
-        # Odeslání po částech
         for start in range(0, len(msg), 1990):
-            await interaction.followup.send(
-                msg[start: start + 1990], ephemeral=True
-            )
+            await send_ephemeral(interaction, msg[start: start + 1990])
 
-
-    @bot.tree.command(name="odeber_varovani", description="Odstraní konkrétní varování (musí to být 1:1 napsané", guild=bot.guild_object)
+    @bot.tree.command(name="odeber_varovani", description="Odstraní konkrétní varování (musí to být 1:1 napsané",
+                      guild=bot.guild_object)
     @app_commands.describe(
         coc_tag="Tag hráče",
         date_time="Datum a čas varování (DD/MM/YYYY HH:MM)",
@@ -250,106 +254,66 @@ async def setup_mod_commands(bot):
     )
     async def remove_warning_cmd(interaction: discord.Interaction, coc_tag: str, date_time: str, reason: str):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze moderátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
         remove_warning(coc_tag, date_time, reason)
-        await interaction.response.send_message("🗑️ Varování odstraněno (pokud existovalo).", ephemeral=True)
+        await send_ephemeral(interaction, "🗑️ Varování odstraněno (pokud existovalo).")
 
     @bot.tree.command(
         name="kdo_neodehral",
         description="Vypíše hráče, kteří dosud neodehráli útok ve válce.",
         guild=bot.guild_object
     )
+    @app_commands.describe(
+        zbyva="Zobrazit hráče, kteří mají ještě zbývající útoky (default: False, zobrazí hráče bez útoků)"
+    )
     async def kdo_neodehral(interaction: discord.Interaction, zbyva: bool = False):
-        # ✅ 1) kontrola oprávnění
-        if not interaction.user.guild_permissions.manage_messages:
-            msg = await interaction.response.send_message(
-                "❌ Tento příkaz může použít pouze moderátor.",
-                ephemeral=True
-            )
-            asyncio.create_task(delete_after_timeout(msg))
+        if not interaction.user.guild_permissions.administrator:
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
 
-        # ✅ 2) zajištění *jedné* sdílené instance ClanWarHandler
         clan_war_handler = getattr(bot, "clan_war_handler", None)
         if clan_war_handler is None:
             clan_war_handler = ClanWarHandler(bot, bot.config)
             bot.clan_war_handler = clan_war_handler
 
-        # ✅ 3) načtení aktuálního stavu války
         war_data = await fetch_current_war(bot.clan_tag, bot.config)
         if not war_data or war_data.get("state") is None:
-            msg = await interaction.followup.send(
-                "❌ Nepodařilo se získat data o aktuální klanové válce.",
-                ephemeral=True
-            )
-            asyncio.create_task(delete_after_timeout(msg))
+            await send_ephemeral(interaction, "❌ Nepodařilo se získat data o aktuální klanové válce.")
             return
 
         state = war_data["state"]
 
-        # ✅ 4) větvení podle stavu války
         if state == "notInWar":
-            msg = await interaction.followup.send(
-                "⚔️ Momentálně neprobíhá žádná klanová válka.",
-                ephemeral=True
-            )
-            asyncio.create_task(delete_after_timeout(msg))
+            await send_ephemeral(interaction, "⚔️ Momentálně neprobíhá žádná klanová válka.")
             return
 
         if state == "preparation":
-            msg = await interaction.followup.send(
-                "🛡️ Válka je ve fázi přípravy. Útoky zatím nelze provádět.",
-                ephemeral=True
-            )
-            asyncio.create_task(delete_after_timeout(msg))
+            await send_ephemeral(interaction, "🛡️ Válka je ve fázi přípravy. Útoky zatím nelze provádět.")
             return
 
-        # Společná funkce pro formátování výpisu hráčů
         async def format_missing_players(members, prefix):
             if not members:
-                msg = await interaction.followup.send(
-                    f"{prefix} Všichni členové klanu již provedli své útoky.",
-                    ephemeral=True
-                )
-                asyncio.create_task(delete_after_timeout(msg))
+                await send_ephemeral(interaction, f"{prefix} Všichni členové klanu již provedli své útoky.")
                 return
 
-            # Odeslání úvodní zprávy
-            prefix_msg = await interaction.followup.send(prefix, ephemeral=True)
-            asyncio.create_task(delete_after_timeout(prefix_msg))
+            await send_ephemeral(interaction, prefix)
 
-            # Příprava a odesílání hráčů po skupinách
             batch = []
-            messages_to_delete = []
             for m in members:
                 tag = m["tag"]
                 name = m["name"].replace('_', r'\_').replace('*', r'\*')
                 mention = await clan_war_handler._get_discord_mention(tag)
                 batch.append(mention if mention else f"@{name}")
 
-                # Odeslat každých 5 hráčů
                 if len(batch) >= 5:
-                    msg = await interaction.followup.send(
-                        " ".join(batch) + " .",
-                        ephemeral=True
-                    )
-                    messages_to_delete.append(msg)
+                    await send_ephemeral(interaction, " ".join(batch) + " .")
                     batch = []
 
-            # Odeslat zbylé hráče (méně než 5)
             if batch:
-                msg = await interaction.followup.send(
-                    " ".join(batch) + " .",
-                    ephemeral=True
-                )
-                messages_to_delete.append(msg)
-
-            # Nastavit mazání všech zpráv s hráči
-            for msg in messages_to_delete:
-                asyncio.create_task(delete_after_timeout(msg))
+                await send_ephemeral(interaction, " ".join(batch) + " .")
 
         if state == "warEnded":
             if zbyva:
@@ -360,14 +324,12 @@ async def setup_mod_commands(bot):
             await format_missing_players(missing, "🏁 Válka již skončila. Útok neprovedli:")
             return
 
-        # state == "inWar"
         attacks_per_member = war_data.get("attacksPerMember", 1)
         if zbyva:
             missing = [m for m in war_data["clan"]["members"] if len(m.get("attacks", [])) < attacks_per_member]
         else:
             missing = [m for m in war_data["clan"]["members"] if len(m.get("attacks", [])) == 0]
 
-        # Získání zbývajícího času války
         end_time = clan_war_handler._parse_coc_time(war_data.get('endTime', ''))
         if end_time:
             remaining = end_time - datetime.now(timezone.utc)
@@ -381,17 +343,6 @@ async def setup_mod_commands(bot):
             await format_missing_players(missing, f"⚔️ Probíhá válka{time_info}. Hráči s alespoň 1 zbývajícím útokem:")
         else:
             await format_missing_players(missing, f"⚔️ Probíhá válka{time_info}. Hráči, kteří neprovedli žádný útok:")
-
-    async def delete_after_timeout(message):
-        await asyncio.sleep(180)  # 3 minuty
-        try:
-            await message.delete()
-        except (discord.NotFound, discord.HTTPException):
-            pass
-
-        # ------------------------------------------------------------------
-        # /propoj_ucet  – přidá (nebo přepíše) propojení Discord ↔ CoC účtu
-        # ------------------------------------------------------------------
 
     @bot.tree.command(
         name="propoj_ucet",
@@ -410,10 +361,7 @@ async def setup_mod_commands(bot):
             coc_name: str
     ):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ Tento příkaz může použít pouze administrátor.",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze administrátor.")
             return
 
         coc_tag = coc_tag.upper()
@@ -423,41 +371,27 @@ async def setup_mod_commands(bot):
         try:
             add_coc_link(str(uzivatel.id), coc_tag, coc_name)
 
-            # ➕ Přiřazení role
             role = interaction.guild.get_role(1365768439473373235)
             if role:
                 try:
                     await uzivatel.add_roles(role, reason="Propojení Clash of Clans účtu")
                 except discord.Forbidden:
-                    await interaction.followup.send(
-                        "⚠️ Nepodařilo se přiřadit roli – chybí oprávnění.",
-                        ephemeral=True
-                    )
+                    await send_ephemeral(interaction, "⚠️ Nepodařilo se přiřadit roli – chybí oprávnění.")
 
             await interaction.response.send_message(
-                f"✅ Účet **{coc_name}** ({coc_tag}) byl propojen s "
-                f"{uzivatel.mention} a byla mu přiřazena role.",
+                f"✅ Účet **{coc_name}** ({coc_tag}) byl propojen s {uzivatel.mention} a byla mu přiřazena role.",
                 ephemeral=False
             )
 
-            # DM uživateli (nevadí, když selže)
             try:
                 await uzivatel.send(
-                    f"🔗 Tvůj Discord účet byl propojen s Clash of Clans účtem "
-                    f"**{coc_name}** (`{coc_tag}`). Byla ti také přidána role na serveru."
-                )
+                    f"🔗 Tvůj Discord účet byl propojen s Clash of Clans účtem **{coc_name}** (`{coc_tag}`).")
             except Exception:
                 pass
 
         except Exception as e:
-            await interaction.response.send_message(
-                f"❌ Nepodařilo se uložit propojení: {e}",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, f"❌ Nepodařilo se uložit propojení: {e}")
 
-    # ------------------------------------------------------------------
-    # /odpoj_ucet – odstraní propojení pro volajícího uživatele
-    # ------------------------------------------------------------------
     @bot.tree.command(
         name="odpoj_ucet",
         description="Odpojí Clash of Clans účet od Discord uživatele a odebere roli.",
@@ -471,51 +405,34 @@ async def setup_mod_commands(bot):
             uzivatel: discord.Member | None = None
     ):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ Tento příkaz může použít pouze administrátor.",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze administrátor.")
             return
 
-        # Pokud parametr chybí, bereme volajícího
         uzivatel = uzivatel or interaction.user
 
         try:
             remove_coc_link(str(uzivatel.id))
 
-            # ➖ Odebrání role
             role = interaction.guild.get_role(1365768439473373235)
             if role and role in uzivatel.roles:
                 try:
                     await uzivatel.remove_roles(role, reason="Odpojení Clash of Clans účtu")
                 except discord.Forbidden:
-                    await interaction.followup.send(
-                        "⚠️ Nepodařilo se odebrat roli – chybí oprávnění.",
-                        ephemeral=True
-                    )
+                    await send_ephemeral(interaction, "⚠️ Nepodařilo se odebrat roli – chybí oprávnění.")
 
             await interaction.response.send_message(
                 f"🗑️ Propojení bylo odstraněno a roli jsem odebral uživateli {uzivatel.mention}.",
                 ephemeral=False
             )
 
-            # DM (opět jen best-effort)
             try:
-                await uzivatel.send(
-                    "🔌 Tvé propojení s Clash of Clans účtem bylo zrušeno a role odebrána."
-                )
+                await uzivatel.send("🔌 Tvé propojení s Clash of Clans účtem bylo zrušeno a role odebrána.")
             except Exception:
                 pass
 
         except Exception as e:
-            await interaction.response.send_message(
-                f"❌ Nepodařilo se odpojit účet: {e}",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, f"❌ Nepodařilo se odpojit účet: {e}")
 
-    # ------------------------------------------------------------------
-    # /seznam_propojeni – vypíše všechna propojení (jen volajícímu)
-    # ------------------------------------------------------------------
     @bot.tree.command(
         name="seznam_propojeni",
         description="Vypíše seznam všech Discord ↔ CoC propojení.",
@@ -523,39 +440,33 @@ async def setup_mod_commands(bot):
     )
     async def seznam_propojeni(interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "❌ Tento příkaz může použít pouze administrátor.",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze administrátor.")
             return
 
         try:
-            links = get_all_links()  # dict {discord_id: (coc_tag, coc_name)}
+            links = get_all_links()
         except Exception as e:
-            await interaction.response.send_message(
-                f"❌ Chyba při čtení databáze: {e}",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, f"❌ Chyba při čtení databáze: {e}")
             return
 
         if not links:
-            await interaction.response.send_message(
-                "ℹ️ Zatím nejsou žádná propojení.",
-                ephemeral=True
-            )
+            await send_ephemeral(interaction, "ℹ️ Zatím nejsou žádná propojení.")
             return
 
         lines = ["**Seznam propojených účtů:**"]
         for discord_id, (tag, name) in links.items():
             lines.append(f"- <@{discord_id}> → **{name}** (`{tag}`)")
-        # zpráva jen volajícímu, aby se zbytečně nespamovalo
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+        await send_ephemeral(interaction, "\n".join(lines), delete_after=300)  # 5 minut pro delší výpisy
 
     @bot.tree.command(name="pravidla_discord", description="Zobrazí pravidla Discord serveru", guild=bot.guild_object)
     async def pravidla_discord(interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze administrátor.")
             return
+
+        await send_ephemeral(interaction, "Pravidla zobrazena", delete_after=1)
+
         embed = discord.Embed(
             title="📜 Pravidla Discord serveru",
             description="Pravidla pro všechny členy našeho Discord serveru:",
@@ -604,8 +515,10 @@ async def setup_mod_commands(bot):
     @bot.tree.command(name="pravidla_clan", description="Zobrazí pravidla herního klanu", guild=bot.guild_object)
     async def pravidla_clan(interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze administrátor.")
             return
+
+        await send_ephemeral(interaction, "Pravidla zobrazena", delete_after=1)
 
         embed = discord.Embed(
             title="⚔️ Pravidla Klanu Czech Heroes",
@@ -663,16 +576,14 @@ async def setup_mod_commands(bot):
     @bot.tree.command(name="vitej", description="Vítej na našem Discord serveru", guild=bot.guild_object)
     async def vitej(interaction: discord.Interaction):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze administrátor.")
             return
+
+        await send_ephemeral(interaction, "Vítej zpráva odeslána", delete_after=1)
 
         embed = discord.Embed(
             title="🎉 Vítej na Discord serveru Czech Heroes!",
-            description=(
-                "Oficiální Discord pro herní klan **Czech Heroes** ze hry Clash of Clans!\n\n"
-                "Tento server je primárně určen pro členy našeho klanu, "
-                "ale návštěvníci budou brzy též vítáni."
-            ),
+            description="Oficiální Discord pro herní klan **Czech Heroes** ze hry Clash of Clans!",
             color=discord.Color.green()
         )
 
@@ -733,106 +644,49 @@ async def setup_mod_commands(bot):
     )
     async def vypis_log(interaction: discord.Interaction, pocet_radku: int = 50):
         if not interaction.user.guild_permissions.administrator:
-            try:
-                await interaction.response.send_message(
-                    "❌ Tento příkaz může použít pouze administrátor.",
-                    ephemeral=True
-                )
-                await asyncio.sleep(300)  # 5 minut
-                await interaction.delete_original_response()
-            except discord.NotFound:
-                pass
-            except Exception as e:
-                print(f"Chyba při mazání zprávy: {e}")
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze administrátor.")
             return
 
         pocet_radku = min(max(pocet_radku, 1), 500)
-
         await interaction.response.defer(ephemeral=True, thinking=True)
 
         log_file = Path(__file__).parent / "CoCDiscordBot.log"
-        messages_to_delete = []
 
         try:
             with open(log_file, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
             if not lines:
-                msg = await interaction.followup.send(
-                    "ℹ️ Log soubor je prázdný.",
-                    ephemeral=True
-                )
-                messages_to_delete.append(msg)
-            else:
-                last_lines = lines[-pocet_radku:]
+                await send_ephemeral(interaction, "ℹ️ Log soubor je prázdný.")
+                return
 
-                # Příprava zpráv po celých řádcích
-                current_chunk = []
-                current_length = 0
+            last_lines = lines[-pocet_radku:]
+            current_chunk = []
+            current_length = 0
 
-                for line in last_lines:
-                    line_length = len(line)
+            for line in last_lines:
+                line_length = len(line)
 
-                    # Pokud by přidání řádku přesáhlo limit, odešleme aktuální chunk
-                    if current_length + line_length > 1900:
-                        if current_chunk:  # Odešleme co máme
-                            msg = await interaction.followup.send(
-                                f"```\n{''.join(current_chunk)}\n```",
-                                ephemeral=True
-                            )
-                            messages_to_delete.append(msg)
-                            current_chunk = []
-                            current_length = 0
+                if current_length + line_length > 1900:
+                    if current_chunk:
+                        await send_ephemeral(interaction, f"```\n{''.join(current_chunk)}\n```", delete_after=300)
+                        current_chunk = []
+                        current_length = 0
 
-                        # Pokud je řádek sám o sobě příliš dlouhý, rozdělíme ho
-                        if line_length > 1900:
-                            parts = [line[i:i + 1900] for i in range(0, len(line), 1900)]
-                            for part in parts[:-1]:
-                                msg = await interaction.followup.send(
-                                    f"```\n{part}\n```",
-                                    ephemeral=True
-                                )
-                                messages_to_delete.append(msg)
-                            line = parts[-1]
-                            line_length = len(line)
+                    if line_length > 1900:
+                        parts = [line[i:i + 1900] for i in range(0, len(line), 1900)]
+                        for part in parts[:-1]:
+                            await send_ephemeral(interaction, f"```\n{part}\n```", delete_after=300)
+                        line = parts[-1]
+                        line_length = len(line)
 
-                    current_chunk.append(line)
-                    current_length += line_length
+                current_chunk.append(line)
+                current_length += line_length
 
-                # Odeslání posledního chunku
-                if current_chunk:
-                    msg = await interaction.followup.send(
-                        f"```\n{''.join(current_chunk)}\n```",
-                        ephemeral=True
-                    )
-                    messages_to_delete.append(msg)
+            if current_chunk:
+                await send_ephemeral(interaction, f"```\n{''.join(current_chunk)}\n```", delete_after=300)
 
         except FileNotFoundError:
-            msg = await interaction.followup.send(
-                f"❌ Log soubor '{log_file}' nebyl nalezen.",
-                ephemeral=True
-            )
-            messages_to_delete.append(msg)
+            await send_ephemeral(interaction, f"❌ Log soubor '{log_file}' nebyl nalezen.")
         except Exception as e:
-            msg = await interaction.followup.send(
-                f"❌ Chyba při čtení log souboru: {e}",
-                ephemeral=True
-            )
-            messages_to_delete.append(msg)
-
-        # Mazání zpráv po 5 minutách s ošetřením chyb
-        await asyncio.sleep(300)  # 5 minut
-        for msg in messages_to_delete:
-            try:
-                await msg.delete()
-            except discord.NotFound:
-                pass
-            except Exception as e:
-                print(f"Chyba při mazání zprávy: {e}")
-
-        try:
-            await interaction.delete_original_response()
-        except discord.NotFound:
-            pass
-        except Exception as e:
-            print(f"Chyba při mazání původní odpovědi: {e}")
+            await send_ephemeral(interaction, f"❌ Chyba při čtení log souboru: {e}")
