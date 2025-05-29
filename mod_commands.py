@@ -14,12 +14,13 @@ from database import remove_warning, fetch_warnings, notify_single_warning, get_
 
 async def setup_mod_commands(bot):
     # Pomocná funkce pro automatické mazání ephemerálních zpráv
-    async def auto_delete_ephemeral(message: discord.Message | discord.InteractionResponse, delay: int = 180):
+    async def auto_delete_ephemeral(message: discord.Message | discord.Interaction, delay: int = 180):
         """Automatically delete ephemeral message after specified delay"""
         try:
             await asyncio.sleep(delay)
-            if isinstance(message, discord.InteractionResponse):
-                await message.delete_original_response()
+            if isinstance(message, discord.Interaction):
+                if message.response.is_done():
+                    await message.delete_original_response()
             else:
                 await message.delete()
         except (discord.NotFound, discord.HTTPException):
