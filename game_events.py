@@ -51,7 +51,6 @@ class GameEventsHandler:
         self.config = config
         self.channel_id = 1367054076688339053
         self.message_id = load_room_id("game_events_message")
-        self.last_events_hash = None  # Pro sledování změn v událostech
 
     async def process_game_events(self):
         """
@@ -67,15 +66,6 @@ class GameEventsHandler:
             print("❌ [game_events] Žádná data o událostech.")
             return
 
-        # Vytvoříme hash aktuálních událostí pro detekci změn
-        current_hash = hash(json.dumps(events, sort_keys=True))
-
-        # Pokud se události nezměnily a zpráva existuje, nic nedělej
-        if current_hash == self.last_events_hash and self.message_id:
-            return
-
-        self.last_events_hash = current_hash
-
         embed = discord.Embed(
             title="📆 Nadcházející Clash of Clans události",
             color=discord.Color.teal()
@@ -83,6 +73,7 @@ class GameEventsHandler:
 
         for event in events:
             title = event['title']
+            # Přejmenování z "CWL" na "Clan War League"
             if title == "CWL":
                 title = "Clan War League"
 
@@ -108,20 +99,11 @@ class GameEventsHandler:
                 except discord.NotFound:
                     print("⚠️ [game_events] Zpráva nenalezena, posílám novou.")
                     self.message_id = None
-                    save_room_id("game_events_message", None)
-                    # Pokračujeme k odeslání nové zprávy
-                except discord.Forbidden:
-                    print("❌ [game_events] Nemám oprávnění upravit zprávu.")
-                    return
-                except Exception as e:
-                    print(f"❌ [game_events] Neočekávaná chyba při úpravě zprávy: {e}")
-                    return
 
-            # Odeslání nové zprávy
             msg = await channel.send(embed=embed)
             self.message_id = msg.id
             save_room_id("game_events_message", msg.id)
-            print("✅ [game_events] Nový embed odeslán.")
+            print("✅ [game_events] Embed odeslán.")
 
         except Exception as e:
             print(f"❌ [game_events] Chyba při odesílání embed zprávy: {e}")
