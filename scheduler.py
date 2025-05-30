@@ -23,6 +23,7 @@ async def hourly_clan_update(config: dict, bot):
     if clan_war_handler is None:
         clan_war_handler = ClanWarHandler(bot, config)
         bot.clan_war_handler = clan_war_handler  # uložíme pro příště
+        game_events_handler = GameEventsHandler(bot, config)
 
     clan_capital_handler = ClanCapitalHandler(bot, config)
     while True:
@@ -89,7 +90,6 @@ async def hourly_clan_update(config: dict, bot):
 
             # === GAME EVENTS ===
             try:
-                game_events_handler = GameEventsHandler(bot, config)
                 await game_events_handler.process_game_events()
             except Exception as e:
                 print(f"❌ [Scheduler] Chyba při zpracování game eventů: {e}")
