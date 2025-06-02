@@ -146,3 +146,63 @@ def fetch_events_from_clash_ninja():
     except Exception as e:
         print(f"❌ [clash_events_api] Chyba při načítání: {e}")
         return []
+
+async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | None:
+    print("🔍 [api_handler] [CWL] Spouštím kontrolu CWL války...")
+
+    league_group = await fetch_league_group(clan_tag, config)
+    if not league_group:
+        print("⚠️ [api_handler] [CWL] league_group nebyl získán.")
+        return None
+
+    rounds = league_group.get("rounds", [])
+    print(f"ℹ️ [api_handler] [CWL] Načteno {len(rounds)} kol CWL.")
+    current_round = cwl_state.get("current_cwl_round") or 0
+    print(f"ℹ️ [api_handler] [CWL] Aktuální index kola: {current_round}")
+
+    if current_round >= len(rounds):
+        print("ℹ️ [api_handler] [CWL] Všechna kola CWL jsou ukončena.")
+        return None
+
+    for tag in rounds[current_round].get("warTags", []):
+        print(f"🔗 [api_handler] [CWL] Kontroluji warTag: {tag}")
+        war_data = await fetch_league_war(tag, config)
+        if not war_data:
+            print("⚠️ [api_handler] [CWL] War data nebyla získána.")
+            continue
+
+        print(f"📄 [api_handler] [CWL] Stav války: {war_data.get('state')}")
+        if war_data.get("state") == "inWar":
+            print(f"🔍 [api_handler] [CWL] Clan tags: {war_data['clan']['tag']} vs {war_data['opponent']['tag']}")
+            if war_data["clan"]["tag"] == clan_tag.upper() or war_data["opponent"]["tag"] == clan_tag.upper():
+                print("✅ [api_handler] [CWL] Nalezená CWL válka se stavem 'inWar'.")
+                return war_data
+        elif war_data.get("state") == "warEnded":
+            print("🔁 [api_handler] [CWL] Válka ukončena, zvyšujeme index kola.")
+            cwl_state.set("current_cwl_round", current_round + 1)
+
+    print("❌ [api_handler] [CWL] Žádná aktivní CWL válka nenalezena.")
+    return None
+
+async def fetch_league_group(clan_tag: str, config: dict) -> dict | None:
+    url = f"{BASE_URL}/clans/{clan_tag.replace('#', '%23')}/currentwar/leaguegroup"
+    headers = get_headers(config)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as resp:
+            print(f"🔍 [api_handler] Volání leaguegroup: status={resp.status}")
+            if resp.status == 200:
+                return await resp.json()
+            else:
+                print(f"⚠️ [api_handler] Chyba při leaguegroup: {resp.status} - {await resp.text()}")
+                return None
+
+
+async def fetch_league_war(war_tag: str, config: dict) -> dict | None:
+    tag = war_tag.replace("#", "%23")
+    url = f"{BASE_URL}/clanwarleagues/wars/{tag}"
+    headers = get_headers(config)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 200:
+                return await resp.json()
+            return None
