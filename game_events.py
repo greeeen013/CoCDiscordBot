@@ -76,6 +76,8 @@ class GameEventsHandler:
             # Přejmenování z "CWL" na "Clan War League"
             if title == "CWL":
                 title = "Clan War League"
+            if title == "CWL(Sign-up Until)":
+                title = "CWL (Přihlášky do..)"
 
             emoji = EVENT_EMOJIS.get(event['title'], "🗓️")
             field_name = f"{emoji} {title}" if not event["active"] else f"🟢 {title} (Probíhá)"
