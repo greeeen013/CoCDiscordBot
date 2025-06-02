@@ -210,7 +210,7 @@ class ClanWarHandler:
             return f"Do konce války zbývá {time_remaining_str}. Útok dosud neprovedli: " + " ".join(
                 mentions_output) + " ."
 
-    async def process_war_data(self, war_data: dict):
+    async def process_war_data(self, war_data: dict, attacks_per_member: int = 2):
         """Zpracuje data o válce a aktualizuje Discord"""
         if not war_data:
             print("❌ [clan_war] Žádná data o válce ke zpracování")
@@ -220,7 +220,7 @@ class ClanWarHandler:
 
         # Reset při změně stavu
         if self._last_state is not None and state == "warEnded" and self._last_state != "warEnded":
-            await self.update_war_status(war_data)
+            await self.update_war_status(war_data, attacks_per_member)
             self.current_war_message_id = None
             room_storage.set("war_status_message", None)
 
@@ -263,7 +263,7 @@ class ClanWarHandler:
 
         try:
             await self.remind_missing_attacks(war_data)
-            await self.update_war_status(war_data)
+            await self.update_war_status(war_data, attacks_per_member)
 
             if war_data.get('state') in ('inWar', 'preparation'):
                 await self.process_war_events(war_data)
@@ -271,14 +271,14 @@ class ClanWarHandler:
         except Exception as e:
             print(f"❌ [clan_war] Chyba při zpracování dat: {str(e)}")
 
-    async def update_war_status(self, war_data: dict):
+    async def update_war_status(self, war_data: dict, attacks_per_member: int = 2):
         """Vytvoří nebo aktualizuje embed se stavem války"""
         channel = self.bot.get_channel(self.war_status_channel_id)
         if not channel:
             print("❌ [clan_war] Kanál pro stav války nebyl nalezen")
             return
 
-        embed = self._create_war_status_embed(war_data)
+        embed = self._create_war_status_embed(war_data, attacks_per_member)
 
         try:
             if self.current_war_message_id:
@@ -297,7 +297,7 @@ class ClanWarHandler:
         except Exception as e:
             print(f"❌ [clan_war] Chyba při aktualizaci stavu války: {str(e)}")
 
-    def _create_war_status_embed(self, war_data: dict) -> discord.Embed:
+    def _create_war_status_embed(self, war_data: dict, attacks_per_member: int = 2) -> discord.Embed:
         """Vytvoří embed se stavem války s dynamickým rozdělením hráčů"""
         clan = war_data.get('clan', {})
         opponent = war_data.get('opponent', {})
@@ -355,7 +355,7 @@ class ClanWarHandler:
                             emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
                             name=(m.get('name', 'Unknown')),
                             attacks=len(m.get('attacks', [])),
-                            max_attacks=war_data.get('attacksPerMember', 2)
+                            max_attacks=war_data.get('attacksPerMember', attacks_per_member)
                         )
                     )
                 return formatted
