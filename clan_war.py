@@ -311,7 +311,7 @@ class ClanWarHandler:
         # Základní statistiky
         our_stats = (
             f"**{clan.get('stars', 0)}⭐**\n"
-            f"Útoky: {clan.get('attacks', 0)}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', 2)}\n"
+            f"Útoky: {clan.get('attacks', 0)}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', attacks_per_member)}\n"
             f"{clan.get('destructionPercentage', 0)}%"
         )
         their_stats = (
