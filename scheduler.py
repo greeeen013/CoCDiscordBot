@@ -1,9 +1,11 @@
 import asyncio
+import json
+import os
 from datetime import datetime
 
 import aiohttp
 
-from api_handler import fetch_clan_members_list, fetch_player_data
+from api_handler import fetch_clan_members_list, fetch_player_data, get_current_cwl_war
 from database import process_clan_data, get_all_links, get_all_members, cleanup_old_warnings
 from member_tracker import discord_sync_members_once
 from role_giver import update_roles
@@ -16,6 +18,35 @@ from game_events import GameEventsHandler
 
 # === Stav pozastavení hodinového updatu ===
 is_hourly_paused = False
+
+class JsonStorage:
+    def __init__(self, path: str):
+        self.path = path
+        self.data = {}
+        self.load()
+
+    def load(self):
+        try:
+            if os.path.exists(self.path):
+                with open(self.path, "r") as f:
+                    self.data = json.load(f)
+        except Exception as e:
+            print(f"[JsonStorage] Chyba při čtení {self.path}: {e}")
+            self.data = {}
+
+    def save(self):
+        try:
+            with open(self.path, "w") as f:
+                json.dump(self.data, f)
+        except Exception as e:
+            print(f"[JsonStorage] Chyba při zápisu {self.path}: {e}")
+
+    def get(self, key: str):
+        return self.data.get(key)
+
+    def set(self, key: str, value):
+        self.data[key] = value
+        self.save()
 
 # === Funkce pro hodinové tahání dat ===
 async def hourly_clan_update(config: dict, bot):
@@ -68,16 +99,6 @@ async def hourly_clan_update(config: dict, bot):
             except Exception as e:
                 print(f"❌ [Scheduler] Chyba při aktualizaci rolí: {e}")
 
-            # === WAR STATUS ===
-            try:
-                war_data = await fetch_current_war("#2QQ0PY9V8", config)
-                if war_data:
-                    await clan_war_handler.process_war_data(war_data)
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                print(f"❌ [Scheduler] Chyba při načítání war dat: {e}")
-            except Exception as e:
-                print(f"❌ [Scheduler] Neočekávaná chyba ve WAR části: {e}")
-
             # === CAPITAL STATUS ===
             try:
                 capital_data = await fetch_current_capital(config["CLAN_TAG"], config)
@@ -99,6 +120,29 @@ async def hourly_clan_update(config: dict, bot):
                 await cleanup_old_warnings()
             except Exception as e:
                 print(f"❌ [Scheduler] Chyba při mazání varování: {e}")
+
+            # === CLAN WAR and CLAN WAR LEAGUE ===
+            try:
+                cwl_state = JsonStorage("cwl_state.json")  # umístění podle struktury
+                cwl_war_data = await get_current_cwl_war(config["CLAN_TAG"], cwl_state, config)
+
+                if cwl_war_data:
+                    print("📣 [Scheduler] Načtena CWL válka")
+                    await clan_war_handler.process_war_data(cwl_war_data, 1)  # 1 pro CWL
+                else:
+                    try:
+                        war_data = await fetch_current_war(config["CLAN_TAG"], config)
+                        if war_data:
+                            print("📣 [Scheduler] Načtena klasická CW válka")
+                            await clan_war_handler.process_war_data(war_data)
+                    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                        print(f"❌ [Scheduler] Chyba při načítání CW dat: {e}")
+                    except Exception as e:
+                        print(f"❌ [Scheduler] Neočekávaná chyba v CW části: {e}")
+
+            except Exception as e:
+                print(f"❌ [Scheduler] Neočekávaná chyba v CWL části: {e}")
+
 
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
