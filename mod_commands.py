@@ -1,4 +1,6 @@
 import asyncio
+import json
+import os
 from pathlib import Path
 
 import discord
@@ -11,6 +13,34 @@ from api_handler import fetch_current_war
 from clan_war import ClanWarHandler
 from database import remove_warning, fetch_warnings, notify_single_warning, get_all_links, remove_coc_link, add_coc_link
 
+class JsonStorage:
+    def __init__(self, path: str):
+        self.path = path
+        self.data = {}
+        self.load()
+
+    def load(self):
+        try:
+            if os.path.exists(self.path):
+                with open(self.path, "r") as f:
+                    self.data = json.load(f)
+        except Exception as e:
+            print(f"[JsonStorage] Chyba při čtení {self.path}: {e}")
+            self.data = {}
+
+    def save(self):
+        try:
+            with open(self.path, "w") as f:
+                json.dump(self.data, f)
+        except Exception as e:
+            print(f"[JsonStorage] Chyba při zápisu {self.path}: {e}")
+
+    def get(self, key: str):
+        return self.data.get(key)
+
+    def set(self, key: str, value):
+        self.data[key] = value
+        self.save()
 
 async def setup_mod_commands(bot):
     # Pomocná funkce pro automatické mazání ephemerálních zpráv
@@ -280,7 +310,18 @@ async def setup_mod_commands(bot):
             clan_war_handler = ClanWarHandler(bot, bot.config)
             bot.clan_war_handler = clan_war_handler
 
-        war_data = await fetch_current_war(bot.clan_tag, bot.config)
+        # Získání CWL války, pokud existuje
+        from api_handler import get_current_cwl_war
+        cwl_state = JsonStorage("cwl_state.json")
+        cwl_war_data = await get_current_cwl_war(bot.clan_tag, cwl_state, bot.config)
+
+        if cwl_war_data:
+            war_data = cwl_war_data
+            attacks_per_member = 1
+        else:
+            war_data = await fetch_current_war(bot.clan_tag, bot.config)
+            attacks_per_member = war_data.get("attacksPerMember", 2)
+
         if not war_data or war_data.get("state") is None:
             await send_ephemeral(interaction, "❌ Nepodařilo se získat data o aktuální klanové válce.")
             return
@@ -316,16 +357,15 @@ async def setup_mod_commands(bot):
             if batch:
                 await send_ephemeral(interaction, " ".join(batch) + " .")
 
+        # Filtrování hráčů
         if state == "warEnded":
             if zbyva:
-                missing = [m for m in war_data["clan"]["members"] if
-                           len(m.get("attacks", [])) < war_data.get("attacksPerMember", 1)]
+                missing = [m for m in war_data["clan"]["members"] if len(m.get("attacks", [])) < attacks_per_member]
             else:
                 missing = [m for m in war_data["clan"]["members"] if not m.get("attacks")]
             await format_missing_players(missing, "🏁 Válka již skončila. Útok neprovedli:")
             return
 
-        attacks_per_member = war_data.get("attacksPerMember", 1)
         if zbyva:
             missing = [m for m in war_data["clan"]["members"] if len(m.get("attacks", [])) < attacks_per_member]
         else:
