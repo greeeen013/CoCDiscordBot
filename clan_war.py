@@ -350,13 +350,14 @@ class ClanWarHandler:
                 formatted = []
                 sorted_members = sorted(
                     members,
-                    key=lambda m: m.get("mapPosition") if isinstance(m.get("mapPosition"), int) else 999
+                    key=lambda x: x.get("mapPosition") if isinstance(x.get("mapPosition"), int) else 999
                 )
-
-                for idx, m in enumerate(sorted_members, start=1):
+                for m in sorted_members:
+                    index = m.get("mapPosition")
+                    index = index + 1 if isinstance(index, int) else "?"
                     formatted.append(
                         "{index}. {emoji} {name} ({attacks}/{max_attacks})".format(
-                            index=idx,
+                            index=index,
                             emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
                             name=(m.get('name', 'Unknown')),
                             attacks=len(m.get('attacks', [])),
