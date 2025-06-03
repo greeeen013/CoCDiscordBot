@@ -348,16 +348,10 @@ class ClanWarHandler:
         if war_data.get('state') in ('inWar', 'preparation', 'warEnded'):
             def format_members(members):
                 formatted = []
-                sorted_members = sorted(
-                    members,
-                    key=lambda x: x.get("mapPosition") if isinstance(x.get("mapPosition"), int) else 999
-                )
-                for m in sorted_members:
-                    index = m.get("mapPosition")
-                    index = index + 1 if isinstance(index, int) else "?"
+                for idx, m in enumerate(sorted(members, key=lambda x: x.get('mapPosition', 0)), start=1):
                     formatted.append(
                         "{index}. {emoji} {name} ({attacks}/{max_attacks})".format(
-                            index=index,
+                            index=idx,
                             emoji=TOWN_HALL_EMOJIS.get(m.get('townhallLevel', 10), ''),
                             name=(m.get('name', 'Unknown')),
                             attacks=len(m.get('attacks', [])),
@@ -462,12 +456,24 @@ class ClanWarHandler:
         clan_name = (war_data.get('clan', {}).get('name', 'Náš klan'))
         opponent_name = (war_data.get('opponent', {}).get('name', 'Protivník'))
 
+        def get_sorted_position(member, members_list):
+            """Vrátí 1-based pozici hráče v seznamu seřazeném podle mapPosition"""
+            if not member or not members_list:
+                return "?"
+            try:
+                sorted_members = sorted(members_list, key=lambda x: x.get('mapPosition', 0))
+                return sorted_members.index(member) + 1
+            except (ValueError, AttributeError):
+                return "?"
         # Určení pozic
-        left_pos = attacker.get("mapPosition") if is_our_attack else defender.get("mapPosition")
-        right_pos = defender.get("mapPosition") if is_our_attack else attacker.get("mapPosition")
 
         left_name = attacker_name if is_our_attack else defender_name
         right_name = defender_name if is_our_attack else attacker_name
+
+        left_pos = get_sorted_position(attacker if is_our_attack else defender,
+                                       left_name if is_our_attack else right_name)
+        right_pos = get_sorted_position(defender if is_our_attack else attacker,
+                                        right_name if is_our_attack else left_name)
 
         left_th = attacker.get('townhallLevel', 10) if is_our_attack else defender.get('townhallLevel', 10)
         right_th = defender.get('townhallLevel', 10) if is_our_attack else attacker.get('townhallLevel', 10)
