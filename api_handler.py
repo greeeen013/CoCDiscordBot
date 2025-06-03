@@ -175,14 +175,25 @@ async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | 
         if war_data.get("state") == "inWar":
             print(f"🔍 [api_handler] [CWL] Clan tags: {war_data['clan']['tag']} vs {war_data['opponent']['tag']}")
             if war_data["clan"]["tag"] == clan_tag.upper() or war_data["opponent"]["tag"] == clan_tag.upper():
+                last_tag = cwl_state.get("last_cwl_war_tag")
+                current_tag = war_data.get("warTag")
+
+                if last_tag != current_tag and last_tag is not None:
+                    print(f"🔁 [api_handler] [CWL] Změna války detekována ({last_tag} → {current_tag}), resetuji připomenutí.")
+                    from clan_war import reset_war_reminder_flags
+                    reset_war_reminder_flags()
+                    cwl_state.set("last_cwl_war_tag", current_tag)
+
                 print("✅ [api_handler] [CWL] Nalezená CWL válka se stavem 'inWar'.")
                 return war_data
+
         elif war_data.get("state") == "warEnded":
             print("🔁 [api_handler] [CWL] Válka ukončena, zvyšujeme index kola.")
             cwl_state.set("current_cwl_round", current_round + 1)
 
     print("❌ [api_handler] [CWL] Žádná aktivní CWL válka nenalezena.")
     return None
+
 
 async def fetch_league_group(clan_tag: str, config: dict) -> dict | None:
     url = f"{BASE_URL}/clans/{clan_tag.replace('#', '%23')}/currentwar/leaguegroup"
