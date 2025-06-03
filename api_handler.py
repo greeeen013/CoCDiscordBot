@@ -188,8 +188,9 @@ async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | 
                 if last_tag != current_tag and last_tag is not None:
                     print(
                         f"🔁 [api_handler] [CWL] Změna války detekována ({last_tag} → {current_tag}), resetuji připomenutí.")
-                    from clan_war import reset_war_reminder_flags
+                    from clan_war import reset_war_reminder_flags, force_end_war_status
                     reset_war_reminder_flags()
+                    await force_end_war_status()
                     cwl_state.set("last_cwl_war_tag", current_tag)
 
                 print("✅ [api_handler] [CWL] Nalezená CWL válka se stavem 'inWar'.")
