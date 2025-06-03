@@ -123,7 +123,7 @@ async def hourly_clan_update(config: dict, bot):
 
             # === CLAN WAR and CLAN WAR LEAGUE ===
             try:
-                cwl_state = JsonStorage("cwl_state.json")  # umístění podle struktury
+                cwl_state = JsonStorage("discord_rooms_ids.json")  # umístění podle struktury
                 cwl_war_data = await get_current_cwl_war(config["CLAN_TAG"], cwl_state, config)
 
                 if cwl_war_data:
