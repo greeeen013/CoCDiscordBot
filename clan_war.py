@@ -348,7 +348,12 @@ class ClanWarHandler:
         if war_data.get('state') in ('inWar', 'preparation', 'warEnded'):
             def format_members(members):
                 formatted = []
-                for idx, m in enumerate(sorted(members, key=lambda x: x.get('mapPosition', 0)), start=1):
+                sorted_members = sorted(
+                    members,
+                    key=lambda m: m.get("mapPosition") if isinstance(m.get("mapPosition"), int) else 999
+                )
+
+                for idx, m in enumerate(sorted_members, start=1):
                     formatted.append(
                         "{index}. {emoji} {name} ({attacks}/{max_attacks})".format(
                             index=idx,
