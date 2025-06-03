@@ -436,7 +436,7 @@ class ClanWarHandler:
         room_storage.set("last_war_event_order", self.last_processed_order)
 
     async def _send_attack_embed(self, channel, attack: dict, war_data: dict):
-        """Vytvoří embed pro jeden útok"""
+        """Vytvoří embed pro jeden útok se stejným číslováním jako hlavní embed"""
         attacker = self._find_member_by_tag(attack.get('attackerTag'), war_data)
         defender = self._find_member_by_tag(attack.get('defenderTag'), war_data)
 
@@ -446,24 +446,26 @@ class ClanWarHandler:
         is_our_attack = any(m.get('tag') == attacker.get('tag') for m in war_data.get('clan', {}).get('members', []))
         discord_mention = await self._get_discord_mention(attack.get('attackerTag'))
 
-        # Barva podle typu akce
+        # Získání seřazených seznamů hráčů (stejně jako v hlavním embedu)
+        our_members_sorted = sorted(war_data.get('clan', {}).get('members', []),
+                                    key=lambda x: x.get('mapPosition', 0))
+        their_members_sorted = sorted(war_data.get('opponent', {}).get('members', []),
+                                      key=lambda x: x.get('mapPosition', 0))
+
+        # Nalezení pozic v seřazených seznamech (1-based)
+        attacker_pos = our_members_sorted.index(attacker) + 1 if is_our_attack else their_members_sorted.index(
+            attacker) + 1
+        defender_pos = their_members_sorted.index(defender) + 1 if is_our_attack else our_members_sorted.index(
+            defender) + 1
+
+        # Zbytek původního kódu s upravenými pozicemi
         embed_color = discord.Color.red() if is_our_attack else discord.Color.blue()
         embed = discord.Embed(color=embed_color)
 
-        # Escape jména
         attacker_name = (attacker.get('name', 'Unknown'))
         defender_name = (defender.get('name', 'Unknown'))
         clan_name = (war_data.get('clan', {}).get('name', 'Náš klan'))
         opponent_name = (war_data.get('opponent', {}).get('name', 'Protivník'))
-
-        # Určení pozic
-        left_pos = (attacker.get("mapPosition", -1) + 1) if is_our_attack else (defender.get("mapPosition", -1) + 1)
-        right_pos = (defender.get("mapPosition", -1) + 1) if is_our_attack else (attacker.get("mapPosition", -1) + 1)
-        left_pos = left_pos if left_pos > 0 else "?"
-        right_pos = right_pos if right_pos > 0 else "?"
-
-        left_name = attacker_name if is_our_attack else defender_name
-        right_name = defender_name if is_our_attack else attacker_name
 
         left_th = attacker.get('townhallLevel', 10) if is_our_attack else defender.get('townhallLevel', 10)
         right_th = defender.get('townhallLevel', 10) if is_our_attack else attacker.get('townhallLevel', 10)
@@ -482,14 +484,16 @@ class ClanWarHandler:
         # Sestavení embedu
         left_side = (
             f"**{clan_name}**\n"
-            f"#{(left_pos or 1)} | {TOWN_HALL_EMOJIS.get(left_th, '')} {left_name}"
+            f"#{attacker_pos if is_our_attack else defender_pos} | {TOWN_HALL_EMOJIS.get(left_th, '')} "
+            f"{attacker_name if is_our_attack else defender_name}"
         )
         if discord_mention and is_our_attack:
             left_side += f"\n{discord_mention}"
 
         right_side = (
             f"**{opponent_name}**\n"
-            f"#{(right_pos or 1)} | {TOWN_HALL_EMOJIS.get(right_th, '')} {right_name}"
+            f"#{defender_pos if is_our_attack else attacker_pos} | {TOWN_HALL_EMOJIS.get(right_th, '')} "
+            f"{defender_name if is_our_attack else attacker_name}"
         )
         if is_our_attack and is_oprava:
             right_side += f"\n`oprava`"
@@ -517,7 +521,7 @@ class ClanWarHandler:
 
             # Pochvala za mirror
             if (is_our_attack and
-                    attacker.get("mapPosition") == defender.get("mapPosition") and
+                    attacker_pos == defender_pos and
                     attack.get("destructionPercentage", 0) == 100 and
                     remaining_hours >= 5):
                 praise_channel = self.bot.get_channel(1371170358056452176) # pošle do místnosti s pochvaly
@@ -527,7 +531,7 @@ class ClanWarHandler:
                     await praise_channel.send(f"{name_or_mention}\nPochvala za krásný útok na mirror včas!")
 
             # Varování za non-mirror
-            if is_our_attack and not is_oprava and attacker.get("mapPosition") != defender.get("mapPosition"):
+            if is_our_attack and not is_oprava and attacker_pos != defender_pos:
                 if remaining_hours >= 5:
                     await notify_single_warning(
                         bot=self.bot,
