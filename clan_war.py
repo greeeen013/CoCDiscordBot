@@ -53,15 +53,45 @@ class RoomIdStorage:
             del self.data[key]
             self.save()
 
-    def reset_war_reminder_flags(self):
-        """Smaže všechny klíče začínající na 'war_reminder_'"""
-        keys_to_remove = [key for key in self.data if key.startswith("war_reminder_")]
-        for key in keys_to_remove:
-            del self.data[key]
-        if keys_to_remove:
-            self.save()
-            print(f"♻️ [clan_war] Resetováno {len(keys_to_remove)} war reminder flagů.")
+def reset_war_reminder_flags(self):
+    """Smaže všechny klíče začínající na 'war_reminder_'"""
+    room_storage.set("last_war_event_order", 0)
+    keys_to_remove = [key for key in self.data if key.startswith("war_reminder_")]
+    for key in keys_to_remove:
+        del self.data[key]
+    if keys_to_remove:
+        self.save()
+        print(f"♻️ [clan_war] Resetováno {len(keys_to_remove)} war reminder flagů.")
 
+
+async def force_end_war_status(self):
+    """Forcefully updates the war status message to show 'Ended' and clears the stored message ID"""
+    if not self.current_war_message_id:
+        return
+
+    channel = self.bot.get_channel(self.war_status_channel_id)
+    if not channel:
+        print("❌ [clan_war] Kanál pro stav války nebyl nalezen")
+        return
+
+    try:
+        message = await channel.fetch_message(self.current_war_message_id)
+        if message.embeds:
+            embed = message.embeds[0]
+            embed.set_footer(text="Stav války: Ukončeno")
+            await message.edit(embed=embed)
+
+        # Clear the stored message ID
+        self.current_war_message_id = None
+        room_storage.set("war_status_message", None)
+        print("♻️ [clan_war] War status byl ručně ukončen")
+
+    except discord.NotFound:
+        print("⚠️ [clan_war] War status zpráva nenalezena")
+        self.current_war_message_id = None
+        room_storage.set("war_status_message", None)
+    except Exception as e:
+        print(f"❌ [clan_war] Chyba při ručním ukončení war statusu: {str(e)}")
 
 room_storage = RoomIdStorage()
 
@@ -252,8 +282,7 @@ class ClanWarHandler:
         if self._last_state is not None and self._last_state != 'preparation' and state == 'preparation':
             print("🔁 [clan_war] Detekována nová válka – resetuji pořadí útoků.")
             self.last_processed_order = 0
-            room_storage.set("last_war_event_order", 0)
-            room_storage.reset_war_reminder_flags()
+            reset_war_reminder_flags()
 
         self._last_state = state
 
