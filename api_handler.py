@@ -147,6 +147,7 @@ def fetch_events_from_clash_ninja():
         print(f"❌ [clash_events_api] Chyba při načítání: {e}")
         return []
 
+
 async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | None:
     print("🔍 [api_handler] [CWL] Spouštím kontrolu CWL války...")
 
@@ -164,7 +165,11 @@ async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | 
         print("ℹ️ [api_handler] [CWL] Všechna kola CWL jsou ukončena.")
         return None
 
-    for tag in rounds[current_round].get("warTags", []):
+    # Projdeme všechny warTagy v aktuálním kole
+    war_tags = rounds[current_round].get("warTags", [])
+    all_ended = True  # Flag pro kontrolu, zda všechny války v kole jsou ukončené
+
+    for tag in war_tags:
         print(f"🔗 [api_handler] [CWL] Kontroluji warTag: {tag}")
         war_data = await fetch_league_war(tag, config)
         if not war_data:
@@ -172,6 +177,8 @@ async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | 
             continue
 
         print(f"📄 [api_handler] [CWL] Stav války: {war_data.get('state')}")
+
+        # Pokud válka probíhá a patří našemu klanu
         if war_data.get("state") == "inWar":
             print(f"🔍 [api_handler] [CWL] Clan tags: {war_data['clan']['tag']} vs {war_data['opponent']['tag']}")
             if war_data["clan"]["tag"] == clan_tag.upper() or war_data["opponent"]["tag"] == clan_tag.upper():
@@ -179,7 +186,8 @@ async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | 
                 current_tag = war_data.get("warTag")
 
                 if last_tag != current_tag and last_tag is not None:
-                    print(f"🔁 [api_handler] [CWL] Změna války detekována ({last_tag} → {current_tag}), resetuji připomenutí.")
+                    print(
+                        f"🔁 [api_handler] [CWL] Změna války detekována ({last_tag} → {current_tag}), resetuji připomenutí.")
                     from clan_war import reset_war_reminder_flags
                     reset_war_reminder_flags()
                     cwl_state.set("last_cwl_war_tag", current_tag)
@@ -187,9 +195,17 @@ async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | 
                 print("✅ [api_handler] [CWL] Nalezená CWL válka se stavem 'inWar'.")
                 return war_data
 
-        elif war_data.get("state") == "warEnded":
-            print("🔁 [api_handler] [CWL] Válka ukončena, zvyšujeme index kola.")
-            cwl_state.set("current_cwl_round", current_round + 1)
+            all_ended = False  # Našli jsme probíhající válku (i když ne naši)
+
+        elif war_data.get("state") != "warEnded":
+            all_ended = False  # Našli jsme válku, která není ukončená
+
+    # Pokud všechny války v kole jsou ukončené, přejdeme na další kolo
+    if all_ended:
+        print("🔁 [api_handler] [CWL] Všechny války v kole ukončeny, zvyšujeme index kola.")
+        cwl_state.set("current_cwl_round", current_round + 1)
+        # Rekurzivně voláme funkci pro nové kolo
+        return await get_current_cwl_war(clan_tag, cwl_state, config)
 
     print("❌ [api_handler] [CWL] Žádná aktivní CWL válka nenalezena.")
     return None
