@@ -3,6 +3,9 @@ import asyncio
 import requests
 from bs4 import BeautifulSoup
 
+from clan_war import reset_war_reminder_flags, room_storage
+
+
 # === Inicializace hlaviček a základní URL ===
 def get_headers(config: dict) -> dict:
     """
@@ -148,102 +151,41 @@ def fetch_events_from_clash_ninja():
         return []
 
 
-async def get_current_cwl_war(clan_tag: str, cwl_state, config: dict) -> dict | None:
-    print("🔍 [api_handler] [CWL] Spouštím kontrolu CWL války...")
+async def make_request(endpoint: str, config: dict) -> dict:
+    """
+    Provede HTTP GET požadavek na Clash of Clans API
 
-    league_group = await fetch_league_group(clan_tag, config)
-    if not league_group:
-        print("⚠️ [api_handler] [CWL] league_group nebyl získán.")
-        return None
-
-    rounds = league_group.get("rounds", [])
-    print(f"ℹ️ [api_handler] [CWL] Načteno {len(rounds)} kol CWL.")
-    current_round = cwl_state.get("current_cwl_round") or 0
-    print(f"ℹ️ [api_handler] [CWL] Aktuální index kola: {current_round}")
-
-    if current_round >= len(rounds):
-        print("ℹ️ [api_handler] [CWL] Všechna kola CWL jsou ukončena.")
-        return None
-
-    # Projdeme všechny warTagy v aktuálním kole
-    war_tags = rounds[current_round].get("warTags", [])
-    all_ended = True  # Flag pro kontrolu, zda všechny války v kole jsou ukončené
-    our_war_data = None  # Uchovává data naší války, pokud existují
-
-    for tag in war_tags:
-        print(f"🔗 [api_handler] [CWL] Kontroluji warTag: {tag}")
-        war_data = await fetch_league_war(tag, config)
-        if not war_data:
-            print("⚠️ [api_handler] [CWL] War data nebyla získána.")
-            continue
-
-        print(f"📄 [api_handler] [CWL] Stav války: {war_data.get('state')}")
-
-        # Kontrola, zda válka patří našemu klanu
-        is_our_war = (
-            war_data.get("clan", {}).get("tag") == clan_tag.upper() or
-            war_data.get("opponent", {}).get("tag") == clan_tag.upper()
-        )
-
-        # Uložíme data naší války, pokud existují (bez ohledu na stav)
-        if is_our_war:
-            our_war_data = war_data
-            last_tag = cwl_state.get("last_cwl_war_tag")
-            current_tag = war_data.get("warTag")
-
-            if last_tag != current_tag and last_tag is not None:
-                print(f"🔁 [api_handler] [CWL] Změna války detekována ({last_tag} → {current_tag}), resetuji připomenutí.")
-                from clan_war import reset_war_reminder_flags, force_end_war_status
-                reset_war_reminder_flags()
-                await force_end_war_status()
-                cwl_state.set("last_cwl_war_tag", current_tag)
-
-        # Kontrola stavu války pro určení, zda je kolo ukončeno
-        if war_data.get("state") == "inWar":
-            all_ended = False
-        elif war_data.get("state") != "warEnded":
-            all_ended = False
-
-        # Pokud je to naše válka a probíhá, vrátíme ji okamžitě
-        if is_our_war and war_data.get("state") == "inWar":
-            print("✅ [api_handler] [CWL] Nalezená aktivní CWL válka našeho klanu.")
-            return war_data
-
-    # Pokud jsme našli naši ukončenou válku, vrátíme ji
-    if our_war_data and our_war_data.get("state") == "warEnded":
-        print("✅ [api_handler] [CWL] Nalezená ukončená CWL válka našeho klanu.")
-        return our_war_data
-
-    # Pokud všechny války v kole jsou ukončené, přejdeme na další kolo
-    if all_ended:
-        print("🔁 [api_handler] [CWL] Všechny války v kole ukončeny, zvyšujeme index kola.")
-        cwl_state.set("current_cwl_round", current_round + 1)
-        # Rekurzivně voláme funkci pro nové kolo
-        return await get_current_cwl_war(clan_tag, cwl_state, config)
-
-    print("❌ [api_handler] [CWL] Žádná aktivní CWL válka nenalezena.")
-    return None
-
-
-async def fetch_league_group(clan_tag: str, config: dict) -> dict | None:
-    url = f"{BASE_URL}/clans/{clan_tag.replace('#', '%23')}/currentwar/leaguegroup"
+    :param endpoint: API endpoint (bez základní URL)
+    :return: JSON response jako dictionary
+    """
     headers = get_headers(config)
+
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as resp:
-            print(f"🔍 [api_handler] Volání leaguegroup: status={resp.status}")
-            if resp.status == 200:
-                return await resp.json()
-            else:
-                print(f"⚠️ [api_handler] Chyba při leaguegroup: {resp.status} - {await resp.text()}")
-                return None
+        async with session.get(f"{BASE_URL}/{endpoint}", headers=headers) as response:
+            if response.status == 200:
+                return await response.json()
+            response.raise_for_status()
 
 
-async def fetch_league_war(war_tag: str, config: dict) -> dict | None:
-    tag = war_tag.replace("#", "%23")
-    url = f"{BASE_URL}/clanwarleagues/wars/{tag}"
-    headers = get_headers(config)
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as resp:
-            if resp.status == 200:
-                return await resp.json()
-            return None
+async def fetch_league_group(clan_tag: str, config: dict) -> dict:
+    """
+    Získá data ligové skupiny pro aktuální CWL
+
+    :param clan_tag: Tag klanu (bez #)
+    :return: Data ligové skupiny
+    """
+    formatted_tag = f"%23{clan_tag.replace('#', '').upper()}"
+    endpoint = f"clans/{formatted_tag}/currentwar/leaguegroup"
+    return await make_request(endpoint, config)
+
+
+async def fetch_league_war(war_tag: str, config: dict) -> dict:
+    """
+    Získá data konkrétní ligové války
+
+    :param war_tag: Tag války (bez #)
+    :return: Data války
+    """
+    formatted_tag = f"%23{war_tag.replace('#', '').upper()}"
+    endpoint = f"clanwarleagues/wars/{formatted_tag}"
+    return await make_request(endpoint, config)
