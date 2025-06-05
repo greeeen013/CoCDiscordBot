@@ -5,7 +5,8 @@ from datetime import datetime
 
 import aiohttp
 
-from api_handler import fetch_clan_members_list, fetch_player_data, get_current_cwl_war
+import api_handler
+from api_handler import fetch_clan_members_list, fetch_player_data
 from database import process_clan_data, get_all_links, get_all_members, cleanup_old_warnings
 from member_tracker import discord_sync_members_once
 from role_giver import update_roles
@@ -19,27 +20,28 @@ from game_events import GameEventsHandler
 # === Stav pozastavení hodinového updatu ===
 is_hourly_paused = False
 
-class JsonStorage:
-    def __init__(self, path: str):
-        self.path = path
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
+class RoomIdStorage:
+    def __init__(self):
         self.data = {}
         self.load()
 
     def load(self):
         try:
-            if os.path.exists(self.path):
-                with open(self.path, "r") as f:
+            if os.path.exists(ROOM_IDS_PATH):
+                with open(ROOM_IDS_PATH, "r") as f:
                     self.data = json.load(f)
         except Exception as e:
-            print(f"[JsonStorage] Chyba při čtení {self.path}: {e}")
+            print(f"[clan_war] [discord_rooms_ids] Chyba při čtení: {e}")
             self.data = {}
 
     def save(self):
         try:
-            with open(self.path, "w") as f:
+            with open(ROOM_IDS_PATH, "w") as f:
                 json.dump(self.data, f)
         except Exception as e:
-            print(f"[JsonStorage] Chyba při zápisu {self.path}: {e}")
+            print(f"[clan_war] [discord_rooms_ids] Chyba při zápisu: {e}")
 
     def get(self, key: str):
         return self.data.get(key)
@@ -48,9 +50,18 @@ class JsonStorage:
         self.data[key] = value
         self.save()
 
+    def remove(self, key: str):
+        if key in self.data:
+            del self.data[key]
+            self.save()
+
+room_storage = RoomIdStorage()
 # === Funkce pro hodinové tahání dat ===
 async def hourly_clan_update(config: dict, bot):
     clan_war_handler = getattr(bot, "clan_war_handler", None)
+    current_cwl_round = room_storage.get("current_cwl_round") or 0
+    cwl_active = room_storage.get("cwl_active") or False
+    cwl_group_data = None
     if clan_war_handler is None:
         clan_war_handler = ClanWarHandler(bot, config)
         bot.clan_war_handler = clan_war_handler  # uložíme pro příště
@@ -123,31 +134,100 @@ async def hourly_clan_update(config: dict, bot):
 
             # === CLAN WAR and CLAN WAR LEAGUE ===
             try:
-                cwl_state = JsonStorage("discord_rooms_ids.json")  # umístění podle struktury
-                cwl_war_data = await get_current_cwl_war(config["CLAN_TAG"], cwl_state, config)
+                print("\n--- Začátek nové iterace scheduleru ---")
 
-                if cwl_war_data:
-                    print("📣 [Scheduler] Načtena CWL válka")
-                    await clan_war_handler.process_war_data(cwl_war_data, 1)  # 1 pro CWL
+                # Normální clan war kontrola
+                print(f"[Clan War] Kontrola normální války pro klan {config['CLAN_TAG']}...")
+                war_data = await fetch_current_war(config['CLAN_TAG'], config)
+                if war_data:
+                    print(f"[Clan War] Data války získána, stav: {war_data.get('state')}")
+                    await clan_war_handler.process_war_data(war_data)
                 else:
+                    print("[Clan War] Žádná aktivní válka nebyla nalezena")
+
+                # CWL logika
+                cwl_active = room_storage.get("cwl_active") or False
+                current_cwl_round = room_storage.get("current_cwl_round") or 0
+
+                if cwl_active:
+                    print(f"\n🔁 [CWL] Pokračuji v kole {current_cwl_round + 1}")
+
                     try:
-                        war_data = await fetch_current_war(config["CLAN_TAG"], config)
-                        if war_data:
-                            print("📣 [Scheduler] Načtena klasická CW válka")
-                            await clan_war_handler.process_war_data(war_data)
-                    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                        print(f"❌ [Scheduler] Chyba při načítání CW dat: {e}")
+                        # Získání aktuálních CWL dat
+                        cwl_group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
+                        if not cwl_group_data:
+                            print("[CWL] Nepodařilo se získat CWL data, deaktivuji CWL")
+                            room_storage.set("cwl_active", False)
+                            continue
+
+                        if current_cwl_round >= len(cwl_group_data.get('rounds', [])):
+                            print("[CWL] Aktuální kolo je větší než počet kol v CWL, resetuji")
+                            room_storage.set("cwl_active", False)
+                            room_storage.set("current_cwl_round", 0)
+                            continue
+
+                        round_wars = cwl_group_data['rounds'][current_cwl_round]['warTags']
+                        print(f"[CWL] Dostupné war tagy v kole: {', '.join(round_wars)}")
+
+                        war_found = False
+                        active_war_found = False
+
+                        for war_tag in round_wars:
+                            if war_tag == "#0":
+                                continue
+
+                            print(f"[CWL] Zpracovávám válku s tagem: {war_tag}")
+                            try:
+                                war_tag_clean = war_tag.replace('#', '')
+                                war_data = await api_handler.fetch_league_war(war_tag_clean, config)
+                                war_state = war_data.get('state', 'unknown')
+                                print(f"[CWL] Stav války: {war_state}")
+
+                                await clan_war_handler.process_war_data(war_data)
+
+                                if war_state == 'warEnded':
+                                    war_found = True
+                                elif war_state in ['preparation', 'inWar']:
+                                    active_war_found = True
+                                    break
+
+                            except Exception as e:
+                                print(f"[CWL] Chyba při načítání války: {str(e)}")
+
+                        # Pokud jsme našli warEnded válku a žádná aktivní nebyla
+                        if war_found and not active_war_found:
+                            new_round = current_cwl_round + 1
+                            room_storage.set("current_cwl_round", new_round)
+                            print(f"➡️ [CWL] Uloženo nové kolo: {new_round + 1}")
+
+                            if new_round >= len(cwl_group_data['rounds']):
+                                room_storage.set("cwl_active", False)
+                                room_storage.set("current_cwl_round", 0)
+                                print("🔄 [CWL] Resetován CWL stav po dokončení všech kol")
+
                     except Exception as e:
-                        print(f"❌ [Scheduler] Neočekávaná chyba v CW části: {e}")
+                        print(f"[CWL] Chyba při zpracování CWL: {str(e)}")
+
+                # Detekce nového CWL
+                else:
+                    print("[CWL] Kontrola zda neběží CWL...")
+                    try:
+                        group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
+                        if group_data and group_data.get('state') in ['warEnded', 'inWar', 'preparation']:
+                            room_storage.set("cwl_active", True)
+                            room_storage.set("current_cwl_round", 0)
+                            print("[CWL] Detekován nový CWL, aktivován")
+                    except Exception as e:
+                        print(f"[CWL] Chyba při kontrole CWL: {str(e)}")
 
             except Exception as e:
-                print(f"❌ [Scheduler] Neočekávaná chyba v CWL části: {e}")
+                print(f"[ERROR] Neočekávaná chyba v scheduleru: {str(e)}")
 
 
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(60 * 3)  # každých 15 minut
+        await asyncio.sleep(60 * 1,5)  # každých 15 minut
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
