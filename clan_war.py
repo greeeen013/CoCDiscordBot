@@ -56,11 +56,11 @@ class RoomIdStorage:
 def reset_war_reminder_flags(self):
     """Smaže všechny klíče začínající na 'war_reminder_'"""
     room_storage.set("last_war_event_order", 0)
-    keys_to_remove = [key for key in self.data if key.startswith("war_reminder_")]
+    keys_to_remove = [key for key in room_storage.data if key.startswith("war_reminder_")]
     for key in keys_to_remove:
-        del self.data[key]
+        del room_storage.data[key]
     if keys_to_remove:
-        self.save()
+        room_storage.save()
         print(f"♻️ [clan_war] Resetováno {len(keys_to_remove)} war reminder flagů.")
 
 
