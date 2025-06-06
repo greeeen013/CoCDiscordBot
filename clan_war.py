@@ -282,7 +282,7 @@ class ClanWarHandler:
         if self._last_state is not None and self._last_state != 'preparation' and state == 'preparation':
             print("🔁 [clan_war] Detekována nová válka – resetuji pořadí útoků.")
             self.last_processed_order = 0
-            reset_war_reminder_flags()
+            reset_war_reminder_flags(self)
 
         self._last_state = state
 
