@@ -183,7 +183,7 @@ async def hourly_clan_update(config: dict, bot):
                                 war_state = war_data.get('state', 'unknown')
                                 print(f"[CWL] Stav války: {war_state}")
 
-                                await clan_war_handler.process_war_data(war_data)
+                                await clan_war_handler.process_war_data(war_data, 1)
 
                                 if war_state == 'warEnded':
                                     war_found = True
