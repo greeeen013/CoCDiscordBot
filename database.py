@@ -388,6 +388,9 @@ class WarningReviewView(View):
             log_channel = interaction.channel
             await log_channel.send(msg)
 
+            # Zkontroluj a upozorni na překročení varování
+            await notify_warnings_exceed(interaction.client)
+
             print(
                 f"✅ [review] {interaction.user.name} ({interaction.user.id}) potvrdil varování: {self.coc_tag} – {self.reason}"
             )
@@ -419,6 +422,7 @@ class WarningReviewView(View):
 # === Upozornění při 3+ varováních a oznámení na Discord ===
 async def notify_warnings_exceed(bot: discord.Client):
     try:
+        print("🔔 [notify] Kontrola vícenásobných varování...")
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
             c.execute("SELECT coc_tag, COUNT(*) FROM clan_warnings GROUP BY coc_tag HAVING COUNT(*) >= 3")
