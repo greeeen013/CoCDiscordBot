@@ -177,6 +177,8 @@ async def hourly_clan_update(config: dict, bot):
                                 continue
 
                             print(f"[CWL] Zpracovávám válku s tagem: {war_tag}")
+                            room_storage.set("current_war_tag", war_tag)
+
                             try:
                                 war_tag_clean = war_tag.replace('#', '')
                                 war_data = await api_handler.fetch_league_war(war_tag_clean, config)
