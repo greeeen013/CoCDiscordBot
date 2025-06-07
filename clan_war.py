@@ -54,19 +54,14 @@ class RoomIdStorage:
             self.save()
 
 def reset_war_reminder_flags(self):
-    print("[DEBUG] Reset start")
+    """Smaže všechny klíče začínající na 'war_reminder_'"""
     room_storage.set("last_war_event_order", 0)
-    print("[DEBUG] Set done")
     keys_to_remove = [key for key in room_storage.data if key.startswith("war_reminder_")]
-    print(f"[DEBUG] Keys to remove: {len(keys_to_remove)}")
     for key in keys_to_remove:
         del room_storage.data[key]
-    print("[DEBUG] Keys deleted")
     if keys_to_remove:
         room_storage.save()
         print(f"♻️ [clan_war] Resetováno {len(keys_to_remove)} war reminder flagů.")
-    print("[DEBUG] Reset end")
-
 
 
 async def force_end_war_status(self):
@@ -180,6 +175,27 @@ class ClanWarHandler:
                     if not missing_members:
                         room_storage.set(key, True)
                         continue
+
+                    for m in missing_members:
+                        tag = m.get("tag")
+                        name = self._escape_name(m.get("name", "Unknown"))
+                        discord_mention = await self._get_discord_mention(tag)
+
+                        if discord_mention:  # Pokud má propojený Discord účet
+                            try:
+                                user = await self.bot.fetch_user(
+                                    int(discord_mention.strip("<@!>")))  # Získání User objektu
+                                dm_message = (
+                                    f"⚠️ **Připomínka: Ve válce zbývá {time_str} do konce!**\n"
+                                    f"Ještě jsi neodehrál útok. Prosím, zaútoč co nejdříve!\n"
+                                    f"Pokud neodheraješ útok, dostaneš varování.\n"
+                                )
+                                await user.send(dm_message)
+                                print(f"✉️ [clan_war] [DM] Upozornění odesláno hráči {name} ({tag})")
+                            except discord.Forbidden:
+                                print(f"❌ [clan_war] [DM] Nelze poslat DM hráči {name} (blokované DMs?)")
+                            except Exception as e:
+                                print(f"❌ [clan_war] [DM] Chyba při odesílání DM hráči {name}: {e}")
 
                     ping_channel = self.bot.get_channel(self.war_ping_channel_id)
                     if not ping_channel:
