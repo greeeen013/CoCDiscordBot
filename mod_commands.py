@@ -9,31 +9,36 @@ from discord.utils import get
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import api_handler
 from api_handler import fetch_current_war
 from clan_war import ClanWarHandler
 from database import remove_warning, fetch_warnings, notify_single_warning, get_all_links, remove_coc_link, add_coc_link
 
-class JsonStorage:
-    def __init__(self, path: str):
-        self.path = path
+
+# === Sdílené ID úložiště ===
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
+
+class RoomIdStorage:
+    def __init__(self):
         self.data = {}
         self.load()
 
     def load(self):
         try:
-            if os.path.exists(self.path):
-                with open(self.path, "r") as f:
+            if os.path.exists(ROOM_IDS_PATH):
+                with open(ROOM_IDS_PATH, "r") as f:
                     self.data = json.load(f)
         except Exception as e:
-            print(f"[JsonStorage] Chyba při čtení {self.path}: {e}")
+            print(f"[clan_war] [discord_rooms_ids] Chyba při čtení: {e}")
             self.data = {}
 
     def save(self):
         try:
-            with open(self.path, "w") as f:
+            with open(ROOM_IDS_PATH, "w") as f:
                 json.dump(self.data, f)
         except Exception as e:
-            print(f"[JsonStorage] Chyba při zápisu {self.path}: {e}")
+            print(f"[clan_war] [discord_rooms_ids] Chyba při zápisu: {e}")
 
     def get(self, key: str):
         return self.data.get(key)
@@ -42,6 +47,12 @@ class JsonStorage:
         self.data[key] = value
         self.save()
 
+    def remove(self, key: str):
+        if key in self.data:
+            del self.data[key]
+            self.save()
+
+room_storage = RoomIdStorage()
 async def setup_mod_commands(bot):
     # Pomocná funkce pro automatické mazání ephemerálních zpráv
     async def auto_delete_ephemeral(message: discord.Message | discord.Interaction, delay: int = 180):
@@ -311,10 +322,13 @@ async def setup_mod_commands(bot):
             bot.clan_war_handler = clan_war_handler
 
         # Získání CWL války, pokud existuje
-        from api_handler import get_current_cwl_war
-        cwl_state = JsonStorage("cwl_state.json")
-        cwl_war_data = await get_current_cwl_war(bot.clan_tag, cwl_state, bot.config)
-
+        war_tag = room_storage.get("current_war_tag")
+        print(war_tag)
+        war_tag_clean = war_tag.replace('#', '')
+        cwl_war_data = await api_handler.fetch_league_war(war_tag_clean, bot.config)
+        state = cwl_war_data["state"]
+        if state == "notInWar" or state == "warEnded":
+            cwl_war_data = None
         if cwl_war_data:
             war_data = cwl_war_data
             attacks_per_member = 1
