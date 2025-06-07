@@ -367,7 +367,7 @@ class ClanWarHandler:
         their_stats = (
             f"**{opponent.get('stars', 0)}⭐**\n"
             f"Útoky: {opponent.get('attacks', 0)}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', attacks_per_member)}\n"
-            f"{round(clan.get('destructionPercentage', 0), 1)}%"
+            f"{round(opponent.get('destructionPercentage', 0), 1)}%"
         )
 
         embed.add_field(name=f"**{self._escape_name(clan.get('name', 'Náš klan'))}**", value=our_stats, inline=True)
