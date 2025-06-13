@@ -160,12 +160,6 @@ async def hourly_clan_update(config: dict, bot):
                             room_storage.set("cwl_active", False)
                             continue
 
-                        if current_cwl_round >= len(cwl_group_data.get('rounds', [])):
-                            print("[CWL] Aktuální kolo je větší než počet kol v CWL, resetuji")
-                            room_storage.set("cwl_active", False)
-                            room_storage.set("current_cwl_round", 0)
-                            continue
-
                         round_wars = cwl_group_data['rounds'][current_cwl_round]['warTags']
                         print(f"[CWL] Dostupné war tagy v kole: {', '.join(round_wars)}")
 
@@ -206,6 +200,14 @@ async def hourly_clan_update(config: dict, bot):
                                 room_storage.set("cwl_active", False)
                                 room_storage.set("current_cwl_round", 0)
                                 print("🔄 [CWL] Resetován CWL stav po dokončení všech kol")
+
+
+
+                        if current_cwl_round >= len(cwl_group_data.get('rounds', [])):
+                            print("[CWL] Aktuální kolo je větší než počet kol v CWL, resetuji")
+                            room_storage.set("cwl_active", False)
+                            room_storage.set("current_cwl_round", 0)
+                            continue
 
                     except Exception as e:
                         print(f"[CWL] Chyba při zpracování CWL: {str(e)}")
