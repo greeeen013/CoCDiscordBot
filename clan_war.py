@@ -176,27 +176,6 @@ class ClanWarHandler:
                         room_storage.set(key, True)
                         continue
 
-                    for m in missing_members:
-                        tag = m.get("tag")
-                        name = self._escape_name(m.get("name", "Unknown"))
-                        discord_mention = await self._get_discord_mention(tag)
-
-                        if discord_mention:  # Pokud má propojený Discord účet
-                            try:
-                                user = await self.bot.fetch_user(
-                                    int(discord_mention.strip("<@!>")))  # Získání User objektu
-                                dm_message = (
-                                    f"⚠️ **Připomínka: Ve válce zbývá {time_str} do konce!**\n"
-                                    f"Ještě jsi neodehrál útok. Prosím, zaútoč co nejdříve!\n"
-                                    f"Pokud neodheraješ útok, dostaneš varování.\n"
-                                )
-                                await user.send(dm_message)
-                                print(f"✉️ [clan_war] [DM] Upozornění odesláno hráči {name} ({tag})")
-                            except discord.Forbidden:
-                                print(f"❌ [clan_war] [DM] Nelze poslat DM hráči {name} (blokované DMs?)")
-                            except Exception as e:
-                                print(f"❌ [clan_war] [DM] Chyba při odesílání DM hráči {name}: {e}")
-
                     ping_channel = self.bot.get_channel(self.war_ping_channel_id)
                     if not ping_channel:
                         continue
@@ -217,6 +196,20 @@ class ClanWarHandler:
                             tag = m.get("tag")
                             name = self._escape_name(m.get("name", "Unknown"))
                             discord_mention = await self._get_discord_mention(tag)
+                            if discord_mention:
+                                try:
+                                    user = await self.bot.fetch_user(int(discord_mention.strip("<@!>")))
+                                    dm_message = (
+                                        f"⚠️ **Připomínka: Ve válce zbývá {time_str} do konce!**\n"
+                                        f"Ještě jsi neodehrál útok. Prosím, zaútoč co nejdříve!\n"
+                                        f"Pokud neodheraješ útok, dostaneš varování.\n"
+                                    )
+                                    await user.send(dm_message)
+                                    print(f"✉️ [clan_war] [DM] Upozornění odesláno hráči {name} ({tag})")
+                                except discord.Forbidden:
+                                    print(f"❌ [clan_war] [DM] Nelze poslat DM hráči {name} (blokované DMs?)")
+                                except Exception as e:
+                                    print(f"❌ [clan_war] [DM] Chyba při odesílání DM hráči {name}: {e}")
                             mentions_list.append(discord_mention or f"@{name}")
 
                         for i in range(0, len(mentions_list), 5):
