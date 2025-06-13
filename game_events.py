@@ -56,6 +56,7 @@ class GameEventsHandler:
         """
         Načte herní události z webu a aktualizuje nebo vytvoří Discord embed zprávu.
         """
+        self.message_id = load_room_id("game_events_message")
         channel = self.bot.get_channel(self.channel_id)
         if not channel:
             print("❌ [game_events] Kanál nenalezen.")

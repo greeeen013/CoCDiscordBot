@@ -118,6 +118,7 @@ class ClanCapitalHandler:
         Zpracuje předaná data z Clash of Clans API a aktualizuje embed.
         Pokud došlo ke změně stavu raidu, zapíše do konzole.
         """
+        self.current_capital_message_id = load_room_id("capital_status_message")
         if not capital_data:
             print("❌ [clan_capital] Žádná data o raidu ke zpracování")
             return
