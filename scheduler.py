@@ -183,12 +183,25 @@ async def hourly_clan_update(config: dict, bot):
                             if war_tag == "#0":
                                 continue
 
+                            # Načtení dat dané ligové války
+                            war_tag_clean = war_tag.replace('#', '')
+                            war_data = await api_handler.fetch_league_war(war_tag_clean, config)
+                            if not war_data:
+                                continue  # přeskočí, pokud se nepodařilo získat data
+
+                            # **Ověření, jestli je náš klan součástí této války:**
+                            our_tag = config["CLAN_TAG"].upper()
+                            clan_tag = war_data.get('clan', {}).get('tag', '').upper()
+                            opponent_tag = war_data.get('opponent', {}).get('tag', '').upper()
+                            if our_tag not in (clan_tag, opponent_tag):
+                                print(f"[CWL] Válka {war_tag} se netýká našeho klanu, přeskočena.")
+                                continue  # pokud náš klan není ani na jedné straně, ignorujeme tuto válku
+
+                            # Pokud jsme došli sem, válka se týká našeho klanu – můžeme ji zpracovat
                             print(f"[CWL] Zpracovávám válku s tagem: {war_tag}")
                             room_storage.set("current_war_tag", war_tag)
 
                             try:
-                                war_tag_clean = war_tag.replace('#', '')
-                                war_data = await api_handler.fetch_league_war(war_tag_clean, config)
                                 war_state = war_data.get('state', 'unknown')
                                 print(f"[CWL] Stav války: {war_state}")
 
@@ -198,7 +211,7 @@ async def hourly_clan_update(config: dict, bot):
                                     war_found = True
                                 elif war_state in ['preparation', 'inWar']:
                                     active_war_found = True
-                                    break
+                                    break # při nalezení aktivní války našeho klanu ukončíme cyklus
 
                             except Exception as e:
                                 print(f"[CWL] Chyba při načítání války: {str(e)}")
