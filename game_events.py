@@ -50,13 +50,13 @@ class GameEventsHandler:
         self.bot = bot
         self.config = config
         self.channel_id = 1367054076688339053
-        self.message_id = load_room_id("game_events_message")
+        self.message_id = load_room_id("game_events_message")  # Načte ID při startu
 
     async def process_game_events(self):
         """
         Načte herní události z webu a aktualizuje nebo vytvoří Discord embed zprávu.
         """
-        self.message_id = load_room_id("game_events_message")
+        # NENACITAT ZNOVA Z DISKU, použijeme self.message_id co už máme v paměti
         channel = self.bot.get_channel(self.channel_id)
         if not channel:
             print("❌ [game_events] Kanál nenalezen.")
@@ -74,7 +74,6 @@ class GameEventsHandler:
 
         for event in events:
             title = event['title']
-            # Přejmenování z "CWL" na "Clan War League"
             if title == "CWL":
                 title = "Clan War League"
             if title == "CWL(Sign-up Until)":
@@ -93,7 +92,7 @@ class GameEventsHandler:
         embed.set_footer(text="Zdroj: clash.ninja")
 
         try:
-            if self.message_id:
+            if self.message_id:  # Použijeme hodnotu z paměti
                 try:
                     msg = await channel.fetch_message(self.message_id)
                     await msg.edit(embed=embed)
@@ -102,11 +101,13 @@ class GameEventsHandler:
                 except discord.NotFound:
                     print("⚠️ [game_events] Zpráva nenalezena, posílám novou.")
                     self.message_id = None
+                    save_room_id("game_events_message", None)  # Vymažeme neplatné ID
 
+            # Pokud nemáme message_id nebo se nepodařilo najít zprávu
             msg = await channel.send(embed=embed)
             self.message_id = msg.id
             save_room_id("game_events_message", msg.id)
-            print("✅ [game_events] Embed odeslán.")
+            print("✅ [game_events] Nový embed odeslán.")
 
         except Exception as e:
             print(f"❌ [game_events] Chyba při odesílání embed zprávy: {e}")
