@@ -151,40 +151,62 @@ def fetch_events_from_clash_ninja():
         return []
 
 
-async def make_request(endpoint: str, config: dict) -> dict:
+async def make_request(endpoint: str, config: dict) -> dict | None:
     """
     Provede HTTP GET požadavek na Clash of Clans API
 
     :param endpoint: API endpoint (bez základní URL)
-    :return: JSON response jako dictionary
+    :return: JSON response jako dictionary nebo None při chybě
     """
     headers = get_headers(config)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"{BASE_URL}/{endpoint}", headers=headers) as response:
-            if response.status == 200:
-                return await response.json()
-            response.raise_for_status()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{BASE_URL}/{endpoint}", headers=headers, timeout=10) as response:
+                if response.status == 200:
+                    return await response.json()
+                elif response.status == 404:
+                    print(f"❌ [api_handler] Data nenalezena (404) pro endpoint: {endpoint}")
+                    return None
+                elif response.status == 403:
+                    print(f"❌ [api_handler] Přístup odepřen (403) pro endpoint: {endpoint}")
+                    return None
+                else:
+                    print(f"❌ [api_handler] Chyba {response.status} pro endpoint: {endpoint}")
+                    return None
+    except asyncio.TimeoutError:
+        print(f"❌ [api_handler] Timeout při požadavku na endpoint: {endpoint}")
+        return None
+    except Exception as e:
+        print(f"❌ [api_handler] Neočekávaná chyba při požadavku na {endpoint}: {str(e)}")
+        return None
 
 
-async def fetch_league_group(clan_tag: str, config: dict) -> dict:
+async def fetch_league_group(clan_tag: str, config: dict) -> dict | None:
     """
     Získá data ligové skupiny pro aktuální CWL
 
-    :param clan_tag: Tag klanu (bez #)
-    :return: Data ligové skupiny
+    :param clan_tag: Tag klanu (včetně #)
+    :return: Data ligové skupiny nebo None pokud není aktivní CWL
     """
     formatted_tag = f"%23{clan_tag.replace('#', '').upper()}"
     endpoint = f"clans/{formatted_tag}/currentwar/leaguegroup"
-    return await make_request(endpoint, config)
+
+    data = await make_request(endpoint, config)
+    if data and data.get('state') in ['warEnded', 'inWar', 'preparation']:
+        print(f"✅ [api_handler] Úspěšně získána CWL skupina pro klan {clan_tag}")
+        return data
+    else:
+        print(f"❌ [api_handler] Nenalezena aktivní CWL skupina pro klan {clan_tag}")
+        return None
 
 
-async def fetch_league_war(war_tag: str, config: dict) -> dict:
+async def fetch_league_war(war_tag: str, config: dict) -> dict | None:
     """
     Získá data konkrétní ligové války
 
-    :param war_tag: Tag války (bez #)
-    :return: Data války
+    :param war_tag: Tag války (včetně #)
+    :return: Data války nebo None při chybě
     """
     formatted_tag = f"%23{war_tag.replace('#', '').upper()}"
     endpoint = f"clanwarleagues/wars/{formatted_tag}"
