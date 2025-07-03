@@ -58,16 +58,28 @@ class RoomIdStorage:
 room_storage = RoomIdStorage()
 # === Funkce pro hodinové tahání dat ===
 async def hourly_clan_update(config: dict, bot):
-    clan_war_handler = getattr(bot, "clan_war_handler", None)
-    current_cwl_round = room_storage.get("current_cwl_round") or 0
-    cwl_active = room_storage.get("cwl_active") or False
-    cwl_group_data = None
-    if clan_war_handler is None:
-        clan_war_handler = ClanWarHandler(bot, config)
-        bot.clan_war_handler = clan_war_handler  # uložíme pro příště
-        game_events_handler = GameEventsHandler(bot, config)
+    # Získání nebo vytvoření ClanWarHandleru
+    clan_war_handler = getattr(bot, "clan_war_handler", None)  # Pokus o získání existujícího handleru z bot objektu
+    current_cwl_round = room_storage.get("current_cwl_round") or 0  # Načtení aktuálního kola CWL z úložiště
+    cwl_active = room_storage.get("cwl_active") or False  # Načtení stavu CWL z úložiště
+    cwl_group_data = None  # Inicializace proměnné pro data CWL skupiny
 
+    # Pokud ClanWarHandler neexistuje, vytvoříme nový
+    if clan_war_handler is None:
+        clan_war_handler = ClanWarHandler(bot, config)  # Vytvoření nového handleru
+        bot.clan_war_handler = clan_war_handler  # Uložení handleru do bot objektu pro budoucí použití
+        game_events_handler = GameEventsHandler(bot, config)  # Vytvoření GameEventsHandleru (původní verze)
+
+    # Získání nebo vytvoření GameEventsHandleru (nová, robustnější verze)
+    game_events_handler = getattr(bot, "game_events_handler", None)  # Pokus o získání existujícího handleru
+    if game_events_handler is None:
+        game_events_handler = GameEventsHandler(bot, config)  # Vytvoření nového handleru
+        bot.game_events_handler = game_events_handler  # Uložení handleru do bot objektu
+
+    # Vytvoření handleru pro Clan Capital (vždy nová instance)
     clan_capital_handler = ClanCapitalHandler(bot, config)
+
+    # Hlavní smyčka
     while True:
         if not is_hourly_paused:
             print(
@@ -122,7 +134,8 @@ async def hourly_clan_update(config: dict, bot):
 
             # === GAME EVENTS ===
             try:
-                await game_events_handler.process_game_events()
+                if 'game_events_handler' in locals():
+                    await game_events_handler.process_game_events()
             except Exception as e:
                 print(f"❌ [Scheduler] Chyba při zpracování game eventů: {e}")
 
@@ -215,14 +228,13 @@ async def hourly_clan_update(config: dict, bot):
                 # Detekce nového CWL
                 else:
                     print("[CWL] Kontrola zda neběží CWL...")
-                    try:
-                        group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
-                        if group_data and group_data.get('state') in ['warEnded', 'inWar', 'preparation']:
-                            room_storage.set("cwl_active", True)
-                            room_storage.set("current_cwl_round", 0)
-                            print("[CWL] Detekován nový CWL, aktivován")
-                    except Exception as e:
-                        print(f"[CWL] Chyba při kontrole CWL: {str(e)}")
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
+                    if group_data:
+                        room_storage.set("cwl_active", True)
+                        room_storage.set("current_cwl_round", 0)
+                        print("[CWL] Detekován nový CWL, aktivován")
+                    else:
+                        print("[CWL] Žádná aktivní CWL skupina nebyla nalezena (není CWL období)")
 
             except Exception as e:
                 print(f"[ERROR] Neočekávaná chyba v scheduleru: {str(e)}")
