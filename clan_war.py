@@ -260,6 +260,17 @@ class ClanWarHandler:
             print("❌ [clan_war] Žádná data o válce ke zpracování")
             return
 
+        # --- Kontrola, zda je náš tag v opponent a pokud ano prohodíme je ---
+        our_clan_tag = self.config["CLAN_TAG"].upper()
+        if war_data.get('opponent', {}).get('tag', '').upper() == our_clan_tag:
+            print("🔄 [clan_war] Prohazuji klany (náš tag nalezen v opponent)")
+            # Prohození clan a opponent
+            clan_data = war_data['opponent']
+            opponent_data = war_data['clan']
+            war_data['clan'] = clan_data
+            war_data['opponent'] = opponent_data
+        # --- Konec kontroly ---
+
         state = war_data.get('state', 'unknown')
 
         # Reset při změně stavu
