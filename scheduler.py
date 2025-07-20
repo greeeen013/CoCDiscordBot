@@ -256,7 +256,7 @@ async def hourly_clan_update(config: dict, bot):
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(60 * 1,5)  # každých 15 minut
+        await asyncio.sleep(60 * 5)  # každých 5 minut
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
