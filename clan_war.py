@@ -194,7 +194,8 @@ class ClanWarHandler:
                         mentions_list = []
                         for m in missing_members:
                             tag = m.get("tag")
-                            name = self._escape_name(m.get("name", "Unknown"))
+                            #name = self._escape_name(m.get("name", "Unknown")) # pro formátování jmena
+                            name = m.get("name", "Unknown")
                             discord_mention = await self._get_discord_mention(tag)
                             if discord_mention:
                                 try:
