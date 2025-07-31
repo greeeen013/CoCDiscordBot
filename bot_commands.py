@@ -6,13 +6,7 @@ from role_giver import update_roles
 from verification import start_verification_permission
 from constants import TOWN_HALL_EMOJIS
 
-HEROES_EMOJIS = {
-    "Barbarian King": "<:barbarian_king:1371137125818568764>",
-    "Archer Queen": "<:archer_queen:1371137339589394432>",
-    "Grand Warden": "<:grand_warden:1371137633891254353>",
-    "Royal Champion": "<:royal_champion:1371137975412592690>",
-    "Minion Prince": "<:minion_prince:1371138182619463713>",
-}
+
 
 # Třídy pro ověřování
 class ConfirmView(discord.ui.View):
@@ -111,102 +105,3 @@ class VerifikaceModal(discord.ui.Modal, title="Ověření Clash of Clans účtu"
                 await interaction.followup.send(description, view=view, ephemeral=True)
             else:
                 await interaction.followup.send("⚠️ Našlo se víc než 3 hráči se stejným jménem. Zadej prosím konkrétní tag (#...).", ephemeral=True)
-
-# Příkazy pro bota
-async def setup_commands(bot):
-    @bot.tree.command(name="aktualizujrole", description="Aktualizuje role všech propojených členů", guild=bot.guild_object)
-    async def aktualizujrole(interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
-            return
-
-        await interaction.response.defer(thinking=True, ephemeral=True)
-
-        clan_members = get_all_members()
-        user_mapping = get_all_links()
-
-        if not clan_members or not user_mapping:
-            await interaction.followup.send("❌ Chyba: nebyla načtena databáze členů nebo propojení.", ephemeral=True)
-            print(f"❌ [bot_commands] Chyba: nebyla načtena databáze členů nebo propojení.")
-            print(f"❌ [bot_commands] Členové: {clan_members}")
-            print(f"❌ [bot_commands] Propojení: {user_mapping}")
-            return
-
-        await update_roles(interaction.guild, user_mapping, clan_members)
-        await interaction.followup.send("✅ Role byly úspěšně aktualizovány!", ephemeral=True)
-
-    @bot.tree.command(name="vytvor_verifikacni_tabulku", description="Vytvoří verifikační tabulku s tlačítkem", guild=bot.guild_object)
-    async def vytvor_verifikacni_tabulku(interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
-            return
-
-        embed = discord.Embed(
-            title="✅ Ověření účtu pro klan Czech Heroes",
-            description=(
-                "- Klikni na tlačítko níže a ověř svůj účet!\n"
-                "- Ověřování je jen pro členy klanu Czech Heroes\n"
-                f"- Nezapomeň si nejprve přečíst pravidla: {interaction.guild.get_channel(1366000196991062086).mention}\n"
-                "- Discord účet bude propojen s Clash of Clans účtem\n"
-                "- Po kliknutí zadáš své jméno nebo #tag\n"
-                "- Provedeš ověření výběrem equipmentu na hrdinu\n"
-                "   - Pokud jsi již ověřený, nelze ověřit znovu\n"
-                f"   - Bot musí být online: <@1363529470778146876>\n"
-            ),
-            color=discord.Color.green()
-        )
-        embed.set_footer(text="- Czech Heroes klan 🔒")
-
-        view = VerifikacniView()
-        await interaction.channel.send(embed=embed, view=view)
-
-        overwrite = discord.PermissionOverwrite()
-        overwrite.send_messages = False
-        await interaction.channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
-
-        await interaction.response.send_message("✅ Verifikační tabulka vytvořena a kanál uzamčen!", ephemeral=True)
-
-    @bot.tree.command(name="max_hero_lvl", description="Zobrazí max levely hrdinů pro dané Town Hall",
-                      guild=bot.guild_object)
-    @app_commands.describe(townhall="Zadej Town Hall (10–17)")
-    async def hero_levels_th(interaction: discord.Interaction, townhall: int):
-        if townhall < 10 or townhall > 17:
-            await interaction.response.send_message("❌ Zadej číslo Town Hall mezi 10 a 17.", ephemeral=True)
-            return
-
-        data = {
-            10: {"Barbarian King": 40, "Archer Queen": 40, "Grand Warden": "N/A", "Royal Champion": "N/A",
-                 "Minion Prince": 20},
-            11: {"Barbarian King": 50, "Archer Queen": 50, "Grand Warden": 20, "Royal Champion": "N/A",
-                 "Minion Prince": 30},
-            12: {"Barbarian King": 65, "Archer Queen": 65, "Grand Warden": 40, "Royal Champion": "N/A",
-                 "Minion Prince": 40},
-            13: {"Barbarian King": 75, "Archer Queen": 75, "Grand Warden": 50, "Royal Champion": 25,
-                 "Minion Prince": 50},
-            14: {"Barbarian King": 80, "Archer Queen": 80, "Grand Warden": 55, "Royal Champion": 30,
-                 "Minion Prince": 60},
-            15: {"Barbarian King": 90, "Archer Queen": 90, "Grand Warden": 65, "Royal Champion": 45,
-                 "Minion Prince": 70},
-            16: {"Barbarian King": 95, "Archer Queen": 95, "Grand Warden": 70, "Royal Champion": 45,
-                 "Minion Prince": "80 *(upraveno)*"},
-            17: {"Barbarian King": 100, "Archer Queen": 100, "Grand Warden": 75, "Royal Champion": 50,
-                 "Minion Prince": "90 *(upraveno)*"},
-        }
-
-        th_data = data[townhall]
-
-        embed = discord.Embed(
-            title=f"{TOWN_HALL_EMOJIS[townhall]} Town Hall {townhall} – Max. levely hrdinů",
-            color=discord.Color.orange()
-        )
-
-        for hero, level in th_data.items():
-            emoji = HEROES_EMOJIS.get(hero, "")
-            embed.add_field(name=f"{emoji} {hero}", value=f"**{level}**", inline=True)
-
-        embed.set_footer(text="Data z officialní clash of clans wiki")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @bot.tree.command(name="helloo", description="Napíše pozdrav", guild=bot.guild_object)
-    async def say_hello(interaction: discord.Interaction):
-        await interaction.response.send_message("Ahoj! 👋")

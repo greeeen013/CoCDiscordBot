@@ -11,9 +11,12 @@ from typing import Optional
 
 import api_handler
 from api_handler import fetch_current_war
+from bot_commands import VerifikacniView
 from clan_war import ClanWarHandler
-from database import remove_warning, fetch_warnings, notify_single_warning, get_all_links, remove_coc_link, add_coc_link
-
+from constants import HEROES_EMOJIS, TOWN_HALL_EMOJIS, max_heroes_lvls
+from database import remove_warning, fetch_warnings, notify_single_warning, get_all_links, remove_coc_link, \
+    add_coc_link, get_all_members
+from role_giver import update_roles
 
 # === Sdílené ID úložiště ===
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -258,34 +261,76 @@ async def setup_mod_commands(bot):
 
     @bot.tree.command(
         name="vypis_varovani",
-        description="Vypíše všechna varování (jen pro tebe)",
+        description="Vypíše varování pro konkrétního uživatele nebo všechna varování",
         guild=bot.guild_object,
     )
-    async def list_warnings_cmd(interaction: discord.Interaction):
+    @app_commands.describe(
+        uzivatel="Discord uživatel (pouze administrátor)",
+        coc_tag="Clash of Clans tag (pouze administrátor)"
+    )
+    async def list_warnings_cmd(
+            interaction: discord.Interaction,
+            uzivatel: Optional[discord.Member] = None,
+            coc_tag: Optional[str] = None
+    ):
+        # Kontrola oprávnění
         if not interaction.user.guild_permissions.moderate_members:
             await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
             return
 
+        # Validace vstupů
+        if uzivatel and coc_tag:
+            await send_ephemeral(interaction, "❌ Použijte pouze jeden parametr (uživatel NEBO tag)")
+            return
+
         await interaction.response.defer(ephemeral=True)
 
-        rows = fetch_warnings()
-        all_links = get_all_links()
+        # Zpracování podle vstupu
+        if uzivatel:
+            # Hledání podle Discord uživatele
+            links = get_all_links()
+            coc_tag = None
+            for discord_id, (tag, _) in links.items():
+                if int(discord_id) == uzivatel.id:
+                    coc_tag = tag
+                    break
 
-        if not rows:
+            if not coc_tag:
+                await send_ephemeral(interaction, f"❌ Uživatel {uzivatel.mention} nemá propojený CoC účet")
+                return
+
+        rows = fetch_warnings()
+        filtered_rows = []
+
+        if coc_tag:
+            # Filtrace podle tagu
+            coc_tag = coc_tag.upper().strip()
+            if not coc_tag.startswith("#"):
+                coc_tag = "#" + coc_tag
+
+            filtered_rows = [row for row in rows if row[0] == coc_tag]
+        elif uzivatel:
+            # Filtrace podle nalezeného tagu
+            filtered_rows = [row for row in rows if row[0] == coc_tag]
+        else:
+            # Všechna varování
+            filtered_rows = rows
+
+        # Zobrazení výsledků
+        if not filtered_rows:
             await send_ephemeral(interaction, "😊 Nenalezeno žádné varování.")
             return
 
         header = "🔶 **Seznam varování**\n"
         lines = []
+        all_links = get_all_links()
 
-        for i, (tag, dt, reason) in enumerate(rows, 1):
+        for i, (tag, dt, reason) in enumerate(filtered_rows, 1):
             coc_name = next((name for _, (t, name) in all_links.items() if t == tag), "Neznámý hráč")
             lines.append(f"{i}. {tag} ({coc_name}) | {dt} | {reason}")
 
         msg = header + "\n".join(lines)
-
-        for start in range(0, len(msg), 1990):
-            await send_ephemeral(interaction, msg[start: start + 1990])
+        await send_ephemeral(interaction, msg)
 
     @bot.tree.command(name="odeber_varovani", description="Odstraní konkrétní varování (musí to být 1:1 napsané",
                       guild=bot.guild_object)
@@ -745,3 +790,645 @@ async def setup_mod_commands(bot):
             await send_ephemeral(interaction, f"❌ Log soubor '{log_file}' nebyl nalezen.")
         except Exception as e:
             await send_ephemeral(interaction, f"❌ Chyba při čtení log souboru: {e}")
+
+    @bot.tree.command(name="aktualizujrole", description="Aktualizuje role všech propojených členů",
+                      guild=bot.guild_object)
+    async def aktualizujrole(interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        clan_members = get_all_members()
+        user_mapping = get_all_links()
+
+        if not clan_members or not user_mapping:
+            await interaction.followup.send("❌ Chyba: nebyla načtena databáze členů nebo propojení.", ephemeral=True)
+            print(f"❌ [bot_commands] Chyba: nebyla načtena databáze členů nebo propojení.")
+            print(f"❌ [bot_commands] Členové: {clan_members}")
+            print(f"❌ [bot_commands] Propojení: {user_mapping}")
+            return
+
+        await update_roles(interaction.guild, user_mapping, clan_members)
+        await interaction.followup.send("✅ Role byly úspěšně aktualizovány!", ephemeral=True)
+
+    @bot.tree.command(name="vytvor_verifikacni_tabulku", description="Vytvoří verifikační tabulku s tlačítkem",
+                      guild=bot.guild_object)
+    async def vytvor_verifikacni_tabulku(interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Tento příkaz může použít pouze administrátor.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="✅ Ověření účtu pro klan Czech Heroes",
+            description=(
+                "- Klikni na tlačítko níže a ověř svůj účet!\n"
+                "- Ověřování je jen pro členy klanu Czech Heroes\n"
+                f"- Nezapomeň si nejprve přečíst pravidla: {interaction.guild.get_channel(1366000196991062086).mention}\n"
+                "- Discord účet bude propojen s Clash of Clans účtem\n"
+                "- Po kliknutí zadáš své jméno nebo #tag\n"
+                "- Provedeš ověření výběrem equipmentu na hrdinu\n"
+                "   - Pokud jsi již ověřený, nelze ověřit znovu\n"
+                f"   - Bot musí být online: <@1363529470778146876>\n"
+            ),
+            color=discord.Color.green()
+        )
+        embed.set_footer(text="- Czech Heroes klan 🔒")
+
+        view = VerifikacniView()
+        await interaction.channel.send(embed=embed, view=view)
+
+        overwrite = discord.PermissionOverwrite()
+        overwrite.send_messages = False
+        await interaction.channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
+
+        await interaction.response.send_message("✅ Verifikační tabulka vytvořena a kanál uzamčen!", ephemeral=True)
+
+    # ===== KONSTANTY PRO PETY =====
+    # Mapování TH na max Pet House level
+    TH_TO_PET_HOUSE = {
+        14: 4,
+        15: 8,
+        16: 10,
+        17: 11
+    }
+
+    # Max levely pro každý Pet podle úrovně Pet House
+    PET_MAX_LEVELS = {
+        1: {"L.A.S.S.I": 10, "Electro Owl": 0, "Mighty Yak": 0, "Unicorn": 0, "Frosty": 0, "Diggy": 0,
+            "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+        2: {"L.A.S.S.I": 10, "Electro Owl": 10, "Mighty Yak": 0, "Unicorn": 0, "Frosty": 0, "Diggy": 0,
+            "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+        3: {"L.A.S.S.I": 10, "Electro Owl": 10, "Mighty Yak": 10, "Unicorn": 0, "Frosty": 0, "Diggy": 0,
+            "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+        4: {"L.A.S.S.I": 10, "Electro Owl": 10, "Mighty Yak": 10, "Unicorn": 10, "Frosty": 0, "Diggy": 0,
+            "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+        5: {"L.A.S.S.I": 15, "Electro Owl": 10, "Mighty Yak": 10, "Unicorn": 10, "Frosty": 10, "Diggy": 0,
+            "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+        6: {"L.A.S.S.I": 15, "Electro Owl": 10, "Mighty Yak": 15, "Unicorn": 10, "Frosty": 10, "Diggy": 10,
+            "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+        7: {"L.A.S.S.I": 15, "Electro Owl": 10, "Mighty Yak": 15, "Unicorn": 10, "Frosty": 10, "Diggy": 10,
+            "Poison Lizard": 10, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+        8: {"L.A.S.S.I": 15, "Electro Owl": 10, "Mighty Yak": 15, "Unicorn": 10, "Frosty": 10, "Diggy": 10,
+            "Poison Lizard": 10, "Phoenix": 10, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+        9: {"L.A.S.S.I": 15, "Electro Owl": 10, "Mighty Yak": 15, "Unicorn": 10, "Frosty": 10, "Diggy": 10,
+            "Poison Lizard": 10, "Phoenix": 10, "Spirit Fox": 10, "Angry Jelly": 0, "Sneezy": 0},
+        10: {"L.A.S.S.I": 15, "Electro Owl": 10, "Mighty Yak": 15, "Unicorn": 10, "Frosty": 10, "Diggy": 10,
+             "Poison Lizard": 10, "Phoenix": 10, "Spirit Fox": 10, "Angry Jelly": 10, "Sneezy": 0},
+        11: {"L.A.S.S.I": 15, "Electro Owl": 10, "Mighty Yak": 15, "Unicorn": 10, "Frosty": 10, "Diggy": 10,
+             "Poison Lizard": 10, "Phoenix": 10, "Spirit Fox": 10, "Angry Jelly": 10, "Sneezy": 10}
+    }
+
+    EQUIPMENT_DATA = {
+        1: {
+            "unlock": "Earthquake Boots",
+            "common": 9,
+            "epic": 12,
+            "th_required": 8
+        },
+        2: {
+            "unlock": "Giant Arrow",
+            "common": 9,
+            "epic": 12,
+            "th_required": 9
+        },
+        3: {
+            "unlock": "Vampstache, Metal Pants",
+            "common": 12,
+            "epic": 15,
+            "th_required": 10
+        },
+        4: {
+            "unlock": "Rage Gem",
+            "common": 12,
+            "epic": 15,
+            "th_required": 11
+        },
+        5: {
+            "unlock": "Healer Puppet, Noble Iron",
+            "common": 15,
+            "epic": 18,
+            "th_required": 12
+        },
+        6: {
+            "unlock": "Healing Tome",
+            "common": 15,
+            "epic": 18,
+            "th_required": 13
+        },
+        7: {
+            "unlock": "Hog Rider Puppet",
+            "common": 18,
+            "epic": 21,
+            "th_required": 14
+        },
+        8: {
+            "unlock": "Haste Vial",
+            "common": 18,
+            "epic": 24,
+            "th_required": 15
+        },
+        9: {
+            "unlock": "Žádné nové (max level)",
+            "common": 18,
+            "epic": 27,
+            "th_required": 16
+        }
+    }
+
+    # Mapování TH na max Blacksmith level
+    TH_TO_BLACKSMITH = {
+        8: 1,
+        9: 2,
+        10: 3,
+        11: 4,
+        12: 5,
+        13: 6,
+        14: 7,
+        15: 8,
+        16: 9,
+        17: 9  # TH17 má stejný max jako TH16
+    }
+
+    # ===== ZJEDNODUŠENÉ KONSTANTY PRO LABORATORY =====
+    TH_TO_LAB = {
+        3: 1,
+        4: 2,
+        5: 3,
+        6: 4,
+        7: 5,
+        8: 6,
+        9: 7,
+        10: 8,
+        11: 9,
+        12: 10,
+        13: 11,
+        14: 12,
+        15: 13,
+        16: 14,
+        17: 15
+    }
+
+    TROOP_UPGRADES = {
+        "Barbarian": {1: 2, 2: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 11: 10, 12: 11, 13: 12},
+        "Archer": {1: 2, 2: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 11: 10, 12: 11, 13: 12, 14: 13},
+        "Giant": {2: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9, 12: 10, 13: 11, 14: 12, 15: 13},
+        "Goblin": {1: 2, 2: 3, 4: 4, 5: 5, 6: 6, 7: 7, 9: 8, 12: 9},
+        "Wall Breaker": {2: 2, 4: 3, 5: 4, 6: 5, 8: 6, 9: 7, 10: 8, 11: 9, 12: 10, 13: 11, 14: 12, 15: 13},
+        "Balloon": {2: 2, 4: 3, 5: 4, 6: 5, 7: 6, 9: 7, 10: 8, 11: 9, 12: 10, 14: 11},
+        "Wizard": {3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9, 11: 10, 13: 11, 14: 12, 15: 13},
+        "Healer": {5: 2, 6: 3, 7: 4, 9: 5, 11: 6, 12: 7, 13: 8, 14: 9, 15: 10},
+        "Dragon": {5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9, 13: 10, 14: 11, 15: 12},
+        "P.E.K.K.A": {6: (2, 3), 7: 4, 8: (5, 6), 9: 7, 10: 8, 11: 9, 13: 10, 14: 11, 15: 12},
+        "Baby Dragon": {7: 2, 8: (3, 4), 9: 5, 10: 6, 11: 7, 12: 8, 13: 9, 14: 10, 15: 11},
+        "Miner": {8: (2, 3), 9: (4, 5), 10: 6, 11: 7, 12: 8, 13: 9, 14: 10, 15: 11},
+        "Electro Dragon": {9: 2, 10: 3, 11: 4, 12: 5, 13: 6, 14: 7, 15: 8},
+        "Yeti": {10: 2, 11: 3, 12: 4, 13: 5, 14: 6, 15: 7},
+        "Dragon Rider": {11: 2, 12: 3, 14: 4, 15: 5},
+        "Electro Titan": {12: 2, 13: 3, 14: 4},
+        "Root Rider": {13: 2, 14: 3},
+        "Thrower": {14: 2, 15: 3}
+    }
+
+    SIEGE_MACHINE_UPGRADES = {
+        "Wall Wrecker": {
+            10: (2, 3),
+            11: 4,
+            13: 5
+        },
+        "Battle Blimp": {
+            10: (2, 3),
+            11: 4
+        },
+        "Stone Slammer": {
+            10: (2, 3),
+            11: 4,
+            13: 5
+        },
+        "Siege Barracks": {
+            10: (2, 3),
+            11: 4,
+            14: 5
+        },
+        "Log Launcher": {
+            10: (2, 3),
+            11: 4,
+            14: 5
+        },
+        "Flame Flinger": {
+            10: (2, 3),
+            11: 4,
+            14: 5
+        },
+        "Battle Drill": {
+            13: (2, 3, 4),
+            15: 5
+        },
+        "Troop Launcher": {
+            14: (2, 3),
+            15: 4
+        }
+    }
+
+    SPELL_UPGRADES = {
+        "Lightning Spell": {1: 2, 2: 3, 3: 4, 6: 5, 7: 6, 8: 7, 9: 8, 10: 9, 13: 10, 14: 11, 15: 12},
+        "Healing Spell": {2: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 11: 8, 13: 9, 14: 10, 15: 11},
+        "Rage Spell": {3: 2, 4: 3, 5: 4, 6: 5, 10: 6},
+        "Jump Spell": {5: 2, 8: 3, 11: 4, 13: 5},
+        "Freeze Spell": {7: 2, 8: (3, 4, 5), 9: 6, 10: 7},
+        "Clone Spell": {8: (2, 3), 9: (4, 5), 11: 6, 12: 7, 13: 8},
+        "Invisibility Spell": {9: 2, 10: 3, 11: 4},
+        "Recall Spell": {11: 2, 12: 3, 13: 4, 14: 5, 15: 6},
+        "Revive Spell": {13: 2, 14: 3, 15: 4}
+    }
+
+    # ===== VIEWS A HELPER FUNKCE =====
+    class SectionSelectView(discord.ui.View):
+        """View pro výběr sekce max levelů"""
+
+        def __init__(self, th_level: int):
+            super().__init__(timeout=180)
+            self.th_level = th_level
+            self.message = None
+
+        async def on_timeout(self):
+            """Automaticky smaže zprávu po timeoutu"""
+            try:
+                if self.message:
+                    await self.message.delete()
+            except:
+                pass
+        @discord.ui.select(
+            placeholder="Vyber co chceš zobrazit...",
+            options=[
+                discord.SelectOption(label="Heroes", value="heroes", emoji="🦸", description="Max levely hrdinů"),
+                discord.SelectOption(label="Pets", value="pets", emoji="🐾", description="Max levely zvířat"),
+                discord.SelectOption(label="Equipment", value="equipment", emoji="⚔️",
+                                     description="Max levely vybavení"),
+                discord.SelectOption(label="Laboratory Upgrades", value="lab", emoji="🧪",
+                                     description="Výzkumy v laboratoři"),
+                discord.SelectOption(label="Buildings", value="buildings", emoji="🏗️", description="Max levely budov")
+            ]
+        )
+        async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+            section = select.values[0]
+
+            if section == "heroes":
+                embed = create_th_embed(self.th_level)
+                view = THLevelView(self.th_level, section)
+            elif section == "pets":
+                embed = create_pets_embed(self.th_level)
+                view = THLevelView(self.th_level, section)
+            elif section == "equipment":
+                embed = create_equipment_embed(self.th_level)
+                view = THLevelView(self.th_level, section)
+            elif section == "lab":
+                embed = create_lab_embed(self.th_level)
+                view = THLevelView(self.th_level, section)
+            else:
+                embed = discord.Embed(
+                    title="Připravujeme...",
+                    description=f"Sekce **{section}** je aktuálně ve vývoji a brzy bude dostupná!",
+                    color=discord.Color.orange()
+                )
+                view = None
+
+            await interaction.response.edit_message(embed=embed, view=view)
+            if view:
+                view.message = interaction.message
+
+
+
+    class THLevelView(discord.ui.View):
+        """View pro procházení TH levelů s podporou sekcí"""
+
+        def __init__(self, initial_th: int, section: str):
+            super().__init__(timeout=180)
+            self.th_level = initial_th
+            self.section = section
+            self.message = None
+            self.update_buttons()
+
+        async def on_timeout(self):
+            """Automaticky smaže zprávu po timeoutu"""
+            try:
+                if self.message:
+                    await self.message.delete()
+            except:
+                pass
+
+        def update_buttons(self):
+            self.clear_items()
+
+            # Tlačítka pro změnu TH - zobrazíme jen pokud existuje vyšší/nižší úroveň
+            if self.th_level > 10:  # Minimální podporovaný TH
+                prev_btn = discord.ui.Button(emoji="⬅️", style=discord.ButtonStyle.secondary, row=0, label="  ")
+                prev_btn.callback = self.on_prev_button
+                self.add_item(prev_btn)
+
+            if self.th_level < 17:  # Maximální podporovaný TH
+                next_btn = discord.ui.Button(emoji="➡️", style=discord.ButtonStyle.secondary, row=0, label="  ")
+                next_btn.callback = self.on_next_button
+                self.add_item(next_btn)
+
+            # Tlačítko pro návrat k výběru sekce
+            back_btn = discord.ui.Button(label="Zpět na výběr", style=discord.ButtonStyle.primary, row=1)
+            back_btn.callback = self.on_back_button
+            self.add_item(back_btn)
+
+        async def on_prev_button(self, interaction: discord.Interaction):
+            if self.th_level > 10:
+                self.th_level -= 1
+                self.update_buttons()
+                await self.update_embed(interaction)
+
+        async def on_next_button(self, interaction: discord.Interaction):
+            if self.th_level < 17:
+                self.th_level += 1
+                self.update_buttons()
+                await self.update_embed(interaction)
+
+        async def on_back_button(self, interaction: discord.Interaction):
+            view = SectionSelectView(self.th_level)
+            embed = discord.Embed(
+                title=f"🔹 {interaction.user.display_name} - TH{self.th_level}",
+                description="Vyber sekci, kterou chceš zobrazit:",
+                color=discord.Color.blue()
+            )
+            await interaction.response.edit_message(embed=embed, view=view)
+            view.message = interaction.message
+
+        async def update_embed(self, interaction: discord.Interaction):
+            if self.section == "heroes":
+                embed = create_th_embed(self.th_level)
+            elif self.section == "pets":
+                embed = create_pets_embed(self.th_level)
+            elif self.section == "equipment":
+                embed = create_equipment_embed(self.th_level)
+            elif self.section == "lab":
+                embed = create_lab_embed(self.th_level)
+            else:
+                embed = discord.Embed(title="Chyba", description="Nepodporovaná sekce", color=discord.Color.red())
+
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    def create_th_embed(th_level: int) -> discord.Embed:
+        th_data = max_heroes_lvls.get(th_level, {})
+        embed = discord.Embed(
+            title=f"{TOWN_HALL_EMOJIS.get(th_level, '')} Town Hall {th_level} – Max. levely hrdinů",
+            color=discord.Color.orange()
+        )
+
+        for hero, level in th_data.items():
+            emoji = HEROES_EMOJIS.get(hero, "")
+            embed.add_field(name=f"{emoji} {hero}", value=f"**{level}**", inline=True)
+
+        embed.set_footer(text="Použij tlačítka pro změnu úrovně")
+        return embed
+
+    def create_pets_embed(th_level: int) -> discord.Embed:
+        # Získání max Pet House pro daný TH
+        max_ph = TH_TO_PET_HOUSE.get(th_level, 0)
+
+        if max_ph == 0:
+            return discord.Embed(
+                title="Pets nejsou dostupné",
+                description="Pets jsou dostupné až od Town Hall 14.",
+                color=discord.Color.orange()
+            )
+
+        pet_data = PET_MAX_LEVELS.get(max_ph, {})
+
+        # Rozdělení petů do dvou sloupců
+        pets = list(pet_data.keys())
+        half = len(pets) // 2
+        col1 = pets[:half]
+        col2 = pets[half:]
+
+        embed = discord.Embed(
+            title=f"{TOWN_HALL_EMOJIS.get(th_level, '')} TH {th_level} Pets (Pet House {max_ph})",
+            color=discord.Color.green()
+        )
+
+        # První sloupec
+        col1_text = ""
+        for pet in col1:
+            level = pet_data[pet]
+            col1_text += f"{pet}: **{level if level > 0 else '-'}**\n"
+        embed.add_field(name="Zvířata", value=col1_text, inline=True)
+
+        # Druhý sloupec
+        col2_text = ""
+        for pet in col2:
+            level = pet_data[pet]
+            col2_text += f"{pet}: **{level if level > 0 else '-'}**\n"
+        embed.add_field(name="\u200b", value=col2_text, inline=True)
+
+        # Prázdný sloupec pro lepší zarovnání
+        embed.add_field(name="\u200b", value="\u200b", inline=False)
+
+        embed.set_footer(text=f"Maximální úroveň Pet House pro TH{th_level} je {max_ph}")
+        return embed
+
+    def create_equipment_embed(th_level: int) -> discord.Embed:
+        blacksmith_level = TH_TO_BLACKSMITH.get(th_level, 0)
+
+        if blacksmith_level == 0:
+            return discord.Embed(
+                title="Blacksmith není dostupný",
+                description="Blacksmith je dostupný až od Town Hall 8.",
+                color=discord.Color.orange()
+            )
+
+        # Získání všech dostupných levelů Blacksmithu pro daný TH
+        available_levels = [lvl for lvl in EQUIPMENT_DATA.keys() if lvl <= blacksmith_level]
+
+        embed = discord.Embed(
+            title=f"{TOWN_HALL_EMOJIS.get(th_level, '')} TH {th_level} - Blacksmith (Level {blacksmith_level})",
+            color=discord.Color.dark_gold()
+        )
+
+        # Přidání informací o aktuálním max levelu
+        current_data = EQUIPMENT_DATA.get(blacksmith_level, {})
+        embed.add_field(
+            name="🔹 Aktuální max levely",
+            value=f"Common: **{current_data.get('common', 'N/A')}**\nEpic: **{current_data.get('epic', 'N/A')}**",
+            inline=False
+        )
+
+        # Přidání seznamu odemčených equipmentů
+        unlocked_items = []
+        for lvl in available_levels:
+            data = EQUIPMENT_DATA.get(lvl, {})
+            unlocked_items.append(f"**Level {lvl}:** {data.get('unlock', 'N/A')}")
+
+        embed.add_field(
+            name="🔹 Odemčené equipmenty",
+            value="\n".join(unlocked_items) if unlocked_items else "Žádné",
+            inline=False
+        )
+
+        # Přidání informace o TH požadavcích
+        embed.add_field(
+            name="🔹 Požadavky na TH",
+            value=f"Pro upgrade na vyšší level Blacksmithu potřebuješ:\n"
+                  f"Level 2 → TH9\nLevel 3 → TH10\nLevel 4 → TH11\n"
+                  f"Level 5 → TH12\nLevel 6 → TH13\nLevel 7 → TH14\n"
+                  f"Level 8 → TH15\nLevel 9 → TH16",
+            inline=False
+        )
+
+        embed.set_footer(text=f"Maximální úroveň Blacksmithu pro TH{th_level} je {blacksmith_level}")
+        return embed
+
+    def create_lab_embed(th_level: int) -> discord.Embed:
+        lab_level = TH_TO_LAB.get(th_level, 0)
+
+        if lab_level == 0:
+            return discord.Embed(
+                title="Laboratoř není dostupná",
+                description="Laboratoř je dostupná až od Town Hall 3.",
+                color=discord.Color.orange()
+            )
+
+        embed = discord.Embed(
+            title=f"{TOWN_HALL_EMOJIS.get(th_level, '')} TH {th_level} - Laboratory (Level {lab_level})",
+            color=discord.Color.purple()
+        )
+
+        # Funkce pro získání maximální úrovně
+        def get_max_level(upgrades_dict):
+            max_level = 0
+            for lab_lvl, upgrade_lvl in upgrades_dict.items():
+                if lab_lvl <= lab_level:
+                    if isinstance(upgrade_lvl, tuple):
+                        current_max = max(upgrade_lvl)
+                    else:
+                        current_max = upgrade_lvl
+                    if current_max > max_level:
+                        max_level = current_max
+            return max_level
+
+        # Přidání dostupných upgradů jednotek
+        available_troops = []
+        for troop, levels in TROOP_UPGRADES.items():
+            max_level = get_max_level(levels)
+            if max_level > 0:
+                available_troops.append(f"**{troop}:** {max_level}")
+
+        embed.add_field(
+            name="🔹 Dostupné upgrady jednotek",
+            value="\n".join(available_troops) if available_troops else "Žádné",
+            inline=False
+        )
+
+        # Přidání dostupných upgradů Siege Machines
+        available_siege = []
+        for siege, levels in SIEGE_MACHINE_UPGRADES.items():
+            max_level = get_max_level(levels)
+            if max_level > 0:
+                available_siege.append(f"**{siege}:** {max_level}")
+
+        embed.add_field(
+            name="🔹 Dostupné upgrady Siege Machines",
+            value="\n".join(available_siege) if available_siege else "Žádné",
+            inline=False
+        )
+
+        # Přidání dostupných upgradů kouzel
+        available_spells = []
+        for spell, levels in SPELL_UPGRADES.items():
+            max_level = get_max_level(levels)
+            if max_level > 0:
+                available_spells.append(f"**{spell}:** {max_level}")
+
+        embed.add_field(
+            name="🔹 Dostupné upgrady kouzel",
+            value="\n".join(available_spells) if available_spells else "Žádné",
+            inline=False
+        )
+
+        return embed
+
+    # ===== UPRAVENÝ PŘÍKAZ /max_lvl =====
+    @bot.tree.command(
+        name="max_lvl",
+        description="Zobrazí max levely pro tvé Town Hall",
+        guild=bot.guild_object
+    )
+    async def max_hero_lvl(interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        try:
+            links = get_all_links()
+            members = get_all_members()
+
+            # Získání všech možných ID reprezentací uživatele
+            discord_ids_to_check = [
+                str(interaction.user.id),  # String ID
+                interaction.user.id,  # Integer ID
+                f"<@{interaction.user.id}>"  # Mention formát
+            ]
+
+            coc_tag = None
+            coc_name = None
+
+            # Prohledáme všechny možné formáty ID
+            for discord_id in discord_ids_to_check:
+                if discord_id in links:
+                    coc_tag, coc_name = links[discord_id]
+                    break
+
+            if not coc_tag:
+                # Debug výpis pro kontrolu
+                print(f"[DEBUG] User {interaction.user.id} not found in links. Available links: {links}")
+                await interaction.followup.send(
+                    "❌ Nemáš propojený účet. Propoj ho nejdříve pomocí ověření nebo příkazu `/propoj_ucet`.\n"
+                    f"Pokud si myslíš, že je to chyba, kontaktuj administrátora a uveď své ID: `{interaction.user.id}`",
+                    ephemeral=True
+                )
+                return
+
+            # Normalizace tagu (pro případ, že v databázi není uppercase)
+            coc_tag_upper = coc_tag.upper()
+
+            # Hledání hráče - kontrolujeme obě varianty tagu (původní a uppercase)
+            player = next(
+                (m for m in members
+                 if m['tag'].upper() == coc_tag_upper or m['tag'] == coc_tag),
+                None
+            )
+
+            if not player:
+                await interaction.followup.send(
+                    "❌ Nenalezeny tvé herní údaje v databázi klanu. Jsi aktuálním členem klanu?",
+                    ephemeral=True
+                )
+                return
+
+            th_level = player.get('townHallLevel', 0)
+
+            if th_level < 10 or th_level > 17:
+                await interaction.followup.send(
+                    f"❌ TVůj Town Hall {th_level} není podporován (podporujeme TH 10-17)",
+                    ephemeral=True
+                )
+                return
+
+            # Zobrazíme výběr sekce
+            view = SectionSelectView(th_level)
+            message = await interaction.followup.send(
+                f"🔹 {interaction.user.display_name} - TH{th_level}\nVyber sekci, kterou chceš zobrazit:",
+                view=view,
+                ephemeral=True,
+                wait=True
+            )
+            view.message = message
+
+        except Exception as e:
+            print(f"[ERROR] in max_lvl command: {str(e)}")
+            await interaction.followup.send(
+                "❌ Došlo k chybě při zpracování příkazu. Administrátor byl informován.",
+                ephemeral=True
+            )

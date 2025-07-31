@@ -6,7 +6,7 @@ import discord # Import základní knihovny discord.py
 from discord.ext import commands # Import třídy commands z discord.ext.commands pro práci s příkazy a bota
 import asyncio # Import knihovny asyncio pro asynchronní programování (např. čekání na události)
 from scheduler import hourly_clan_update # Import funkce pro hodinovou aktualizaci členů klanu
-from bot_commands import setup_commands, VerifikacniView, ConfirmView # Import funkcí a tříd pro nastavení příkazů a ověřovacího pohledu
+from bot_commands import VerifikacniView, ConfirmView # Import funkcí a tříd pro nastavení příkazů a ověřovacího pohledu
 from mod_commands import setup_mod_commands # Import funkcí pro nastavení moderátorských příkazů
 from constants import TOWN_HALL_EMOJIS
 
@@ -39,7 +39,6 @@ class MyBot(commands.Bot):
         self.log_channel_id = 1371089891621998652
 
     async def setup_hook(self):
-        await setup_commands(self)
         await setup_mod_commands(self)
 
         try:
