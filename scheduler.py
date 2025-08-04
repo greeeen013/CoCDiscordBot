@@ -219,7 +219,7 @@ async def hourly_clan_update(config: dict, bot):
                         # Pokud jsme našli warEnded válku a žádná aktivní nebyla
                         if war_found and not active_war_found:
                             new_round = current_cwl_round + 1
-                            room_storage.set("current_cwl_round", new_round)
+                            room_storage.set("current_cwl_round", new_round + 1)
                             print(f"➡️ [CWL] Uloženo nové kolo: {new_round + 1}")
 
                             if new_round >= len(cwl_group_data['rounds']):
@@ -256,7 +256,7 @@ async def hourly_clan_update(config: dict, bot):
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(60 * 5)  # každých 5 minut
+        await asyncio.sleep(60 * 3)  # každých 5 minut
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
