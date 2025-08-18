@@ -18,6 +18,9 @@ from database import remove_warning, fetch_warnings, notify_single_warning, get_
     add_coc_link, get_all_members
 from role_giver import update_roles
 
+from constants import HEROES_EMOJIS, TOWN_HALL_EMOJIS, max_heroes_lvls, ROLE_VERIFIED, ROLE_ELDER, ROLE_CO_LEADER
+
+
 # === Sdílené ID úložiště ===
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOM_IDS_PATH = os.path.join(THIS_DIR, "discord_rooms_ids.json")
@@ -57,6 +60,27 @@ class RoomIdStorage:
 
 room_storage = RoomIdStorage()
 async def setup_mod_commands(bot):
+
+    # === Role/permission helpers ===
+    def _is_admin(member: discord.Member) -> bool:
+        return bool(getattr(member.guild_permissions, "administrator", False))
+
+    def _has_role(member: discord.Member, role_id: int) -> bool:
+        try:
+            return any(r.id == role_id for r in getattr(member, "roles", []))
+        except Exception:
+            return False
+
+    def _is_co_leader(member: discord.Member) -> bool:
+        return _has_role(member, ROLE_CO_LEADER)
+
+    def _is_elder(member: discord.Member) -> bool:
+        return _has_role(member, ROLE_ELDER)
+
+    def _is_verified(member: discord.Member) -> bool:
+        # Elder/Co-Leader jsou implicitně “ověření”
+        return _has_role(member, ROLE_VERIFIED) or _is_elder(member) or _is_co_leader(member)
+
     # Pomocná funkce pro automatické mazání ephemerálních zpráv
     async def auto_delete_ephemeral(message: discord.Message | discord.Interaction, delay: int = 180):
         """Automatically delete ephemeral message after specified delay"""
@@ -241,6 +265,11 @@ async def setup_mod_commands(bot):
     ):
         await interaction.response.defer(ephemeral=True, thinking=True)
 
+        # ✅ Povolení: pouze Co-Leader nebo Administrátor
+        if not (_is_admin(interaction.user) or _is_co_leader(interaction.user)):
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze **Co-Leader** nebo **Administrátor**.")
+            return
+
         # 1) Validace: nesmí být současně uzivatel i coc_tag
         if uzivatel and coc_tag:
             await send_ephemeral(interaction, "❌ Použij **jen jeden** identifikátor: buď `uzivatel`, nebo `coc_tag`.")
@@ -312,10 +341,19 @@ async def setup_mod_commands(bot):
             uzivatel: Optional[discord.Member] = None,
             coc_tag: Optional[str] = None
     ):
+        # ✅ Pravidla:
+        # - Bez parametrů: může každý ověřený člen klanu (ROLE_VERIFIED/Elder/Co-Leader/Admin)
+        # - S parametry (uzivatel nebo coc_tag): pouze Co-Leader nebo Administrátor
         # Kontrola oprávnění
-        if not interaction.user.guild_permissions.moderate_members:
-            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
-            return
+        if (uzivatel is not None or coc_tag is not None):
+            if not (_is_admin(interaction.user) or _is_co_leader(interaction.user)):
+                await send_ephemeral(interaction,
+                                     "❌ Parametry `uzivatel`/`coc_tag` může použít pouze **Co-Leader** nebo **Administrátor**.")
+                return
+        else:
+            if not (_is_admin(interaction.user) or _is_co_leader(interaction.user) or _is_verified(interaction.user)):
+                await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze **ověřený člen klanu**.")
+                return
 
         # Validace vstupů
         if uzivatel and coc_tag:
@@ -405,8 +443,9 @@ async def setup_mod_commands(bot):
         zbyva="Zobrazit hráče, kteří mají ještě zbývající útoky (default: False, zobrazí hráče bez útoků)"
     )
     async def kdo_neodehral(interaction: discord.Interaction, zbyva: bool = False):
-        if not interaction.user.guild_permissions.administrator:
-            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze moderátor.")
+        # ✅ Povolení: Elder, Co-Leader nebo Administrátor
+        if not (_is_admin(interaction.user) or _is_co_leader(interaction.user) or _is_elder(interaction.user)):
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze **Elder**, **Co-Leader** nebo **Administrátor**.")
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -608,9 +647,12 @@ async def setup_mod_commands(bot):
         guild=bot.guild_object
     )
     async def seznam_propojeni(interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze administrátor.")
+        # ✅ Povolení: pouze Co-Leader nebo Administrátor
+        if not (_is_admin(interaction.user) or _is_co_leader(interaction.user)):
+            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze **Co-Leader** nebo **Administrátor**.")
             return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
         try:
             links = get_all_links()
