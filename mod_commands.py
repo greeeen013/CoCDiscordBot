@@ -956,6 +956,108 @@ async def setup_mod_commands(bot):
 
         await interaction.response.send_message("✅ Verifikační tabulka vytvořena a kanál uzamčen!", ephemeral=True)
 
+    async def _send_commands_help(interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        def _commands_permissions_table_embed(role_index: int) -> discord.Embed:
+            # role_index: 0=Verified, 1=Elder, 2=Co-Leader
+            roles = ["Verified", "Elder", "Co-Leader"]
+            role_name = roles[role_index]
+
+            # Define command matrix and descriptions
+            commands = [
+                ("kdo_neodehral", "Vypíše hráče, kteří neodehráli (nebo kterým zbývá útok)."),
+                ("seznam_propojeni", "Seznam propojení Discord ↔ CoC."),
+                ("pridej_varovani", "Přidá/naplánuje varování pro hráče."),
+                ("vypis_varovani", "Vypíše varování. Bez parametrů kdokoli ověřený; s parametry jen Co-Leader."),
+                ("propojit_ucet", "Propojí Discord účet s CoC účtem a přidá roli Verified."),
+                ("odpoj_ucet", "Zruší propojení účtu a odebere roli Verified."),
+            ]
+
+            # Permission matrix by role
+            def can_for(role, cmd):
+                if cmd == "kdo_neodehral":
+                    return role in ("Elder", "Co-Leader")
+                if cmd == "seznam_propojeni":
+                    return role in ("Co-Leader",)
+                if cmd == "pridej_varovani":
+                    return role in ("Co-Leader",)
+                if cmd == "vypis_varovani":
+                    # Verified: own/no params; Elder: jako Verified; Co-Leader: full
+                    return True
+                if cmd in ("propojit_ucet", "odpoj_ucet"):
+                    # kdokoli může vyvolat pro sebe; ověření probíhá uvnitř
+                    return True
+                return False
+
+            lines = []
+            for name, desc in commands:
+                allowed = can_for(
+                    "Co-Leader" if role_index == 2 else ("Elder" if role_index == 1 else "Verified"),
+                    name
+                )
+                mark = "✅" if allowed else "❌"
+                lines.append(f"**/{name}** — {mark}\n{desc}")
+
+            embed = discord.Embed(
+                title=f"📋 Commands – {role_name}",
+                description="\n\n".join(lines),
+                color=discord.Color.blurple(),
+            )
+            embed.set_footer(text="Tip: ⬅️ ➡️ pro přepínání rolí • Administrátor má přístup ke všem příkazům.")
+            return embed
+
+        # pick start index based on caller's role
+        def _start_index_for_user(member: discord.Member) -> int:
+            if _is_co_leader(member):
+                return 2
+            if _is_elder(member):
+                return 1
+            return 0
+
+        index = _start_index_for_user(interaction.user)  # 0=Verified,1=Elder,2=Co-Leader
+        author_id = interaction.user.id
+
+        view = discord.ui.View(timeout=60.0)
+
+        left_btn = discord.ui.Button(emoji="⬅️", style=discord.ButtonStyle.secondary)
+        right_btn = discord.ui.Button(emoji="➡️", style=discord.ButtonStyle.secondary)
+
+        async def _guard(inter: discord.Interaction) -> bool:
+            if inter.user.id != author_id:
+                await inter.response.send_message("🔒 Tohle může ovládat jen autor zobrazení.", ephemeral=True)
+                return False
+            return True
+
+        async def on_left(inter: discord.Interaction):
+            nonlocal index
+            if not await _guard(inter):
+                return
+            index = (index - 1) % 3
+            await inter.response.edit_message(embed=_commands_permissions_table_embed(index), view=view)
+
+        async def on_right(inter: discord.Interaction):
+            nonlocal index
+            if not await _guard(inter):
+                return
+            index = (index + 1) % 3
+            await inter.response.edit_message(embed=_commands_permissions_table_embed(index), view=view)
+
+        left_btn.callback = on_left
+        right_btn.callback = on_right
+        view.add_item(left_btn)
+        view.add_item(right_btn)
+
+        await interaction.followup.send(embed=_commands_permissions_table_embed(index), view=view, ephemeral=True)
+
+    @bot.tree.command(name="commands", description="Zobrazí přehled příkazů a oprávnění.", guild=bot.guild_object)
+    async def commands_cmd(interaction: discord.Interaction):
+        await _send_commands_help(interaction)
+
+    @bot.tree.command(name="help", description="Zobrazí přehled příkazů a oprávnění.", guild=bot.guild_object)
+    async def help_cmd(interaction: discord.Interaction):
+        await _send_commands_help(interaction)
+
     # ===== KONSTANTY PRO PETY =====
     # Mapování TH na max Pet House level
     TH_TO_PET_HOUSE = {
