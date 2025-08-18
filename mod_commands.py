@@ -313,8 +313,19 @@ async def setup_mod_commands(bot):
             # Filtrace podle nalezeného tagu
             filtered_rows = [row for row in rows if row[0] == coc_tag]
         else:
-            # Všechna varování
-            filtered_rows = rows
+            # místo všech varování použít tag volajícího
+            links = get_all_links()
+            user_tag = None
+            for discord_id, (tag, _) in links.items():
+                if int(discord_id) == interaction.user.id:
+                    user_tag = tag
+                    break
+
+            if not user_tag:
+                await send_ephemeral(interaction, "❌ Nemáš propojený CoC účet.")
+                return
+
+            filtered_rows = [row for row in rows if row[0] == user_tag.upper()]
 
         # Zobrazení výsledků
         if not filtered_rows:
