@@ -49,17 +49,68 @@ class GameEventsHandler:
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
+        # může být v configu
         self.channel_id = 1367054076688339053
-        self.message_id = load_room_id("game_events_message")  # Načte ID při startu
+        # 1) zkus načíst z JSON
+        self.message_id = load_room_id("game_events_message")
+
+    async def _ensure_message_id(self, channel: discord.TextChannel):
+        """
+        Zajistí self.message_id tak, že:
+        - buď funguje fetch_message(self.message_id),
+        - nebo najde poslední zprávu od bota v kanálu a uloží ji,
+        - nebo pošle novou a uloží její ID.
+        """
+        # pokud v JSON bylo ID, ověř, že zpráva existuje
+        if self.message_id:
+            try:
+                await channel.fetch_message(self.message_id)
+                return  # vše OK
+            except discord.NotFound:
+                print("⚠️ [game_events] Zpráva z JSONu neexistuje, zkusím najít poslední botí zprávu.")
+                # spadneme níž na hledání
+            except discord.Forbidden:
+                print("❌ [game_events] Nemám oprávnění číst zprávy v kanálu.")
+                return
+            except discord.HTTPException as e:
+                print(f"❌ [game_events] HTTP chyba při fetch_message: {e}")
+
+        # 2) najdi poslední zprávu od bota v historii kanálu
+        try:
+            async for m in channel.history(limit=50, oldest_first=False):
+                if m.author.id == self.bot.user.id:
+                    self.message_id = m.id
+                    save_room_id("game_events_message", m.id)
+                    print("✅ [game_events] Nalezl jsem poslední botí zprávu, budu ji editovat.")
+                    return
+        except discord.Forbidden:
+            print("❌ [game_events] Nemám oprávnění číst historii kanálu.")
+        except Exception as e:
+            print(f"❌ [game_events] Chyba při procházení historie: {e}")
+
+        # 3) pokud nic, pošli novou placeholder zprávu (bez embedu), ID si uložíme a hned ji budeme editovat
+        try:
+            placeholder = await channel.send("⏳ Připravuji přehled událostí…")
+            self.message_id = placeholder.id
+            save_room_id("game_events_message", placeholder.id)
+            print("✅ [game_events] Vytvořil jsem novou referenční zprávu.")
+        except Exception as e:
+            print(f"❌ [game_events] Nepodařilo se vytvořit referenční zprávu: {e}")
 
     async def process_game_events(self):
         """
         Načte herní události z webu a aktualizuje nebo vytvoří Discord embed zprávu.
+        Nikdy neposílá duplicitní zprávy – vždy edituje poslední botí zprávu v kanálu.
         """
-        # NENACITAT ZNOVA Z DISKU, použijeme self.message_id co už máme v paměti
         channel = self.bot.get_channel(self.channel_id)
         if not channel:
             print("❌ [game_events] Kanál nenalezen.")
+            return
+
+        # Zajisti, že máme platné message_id (JSON → historie → nová)
+        await self._ensure_message_id(channel)
+        if not self.message_id:
+            print("❌ [game_events] Nemám message_id, končím.")
             return
 
         events = fetch_events_from_clash_ninja()
@@ -91,23 +142,17 @@ class GameEventsHandler:
 
         embed.set_footer(text="Zdroj: clash.ninja")
 
+        # teď už jen edituj potvrzenou zprávu
         try:
-            if self.message_id:  # Použijeme hodnotu z paměti
-                try:
-                    msg = await channel.fetch_message(self.message_id)
-                    await msg.edit(embed=embed)
-                    print("✅ [game_events] Embed upraven.")
-                    return
-                except discord.NotFound:
-                    print("⚠️ [game_events] Zpráva nenalezena, posílám novou.")
-                    self.message_id = None
-                    save_room_id("game_events_message", None)  # Vymažeme neplatné ID
-
-            # Pokud nemáme message_id nebo se nepodařilo najít zprávu
+            msg = await channel.fetch_message(self.message_id)
+            await msg.edit(content=None, embed=embed)
+            print("✅ [game_events] Embed upraven.")
+        except discord.NotFound:
+            # výjimečně pokud byla smazána mezi _ensure_message_id a editací
+            print("⚠️ [game_events] Zpráva zmizela, vytvořím novou.")
             msg = await channel.send(embed=embed)
             self.message_id = msg.id
             save_room_id("game_events_message", msg.id)
             print("✅ [game_events] Nový embed odeslán.")
-
         except Exception as e:
-            print(f"❌ [game_events] Chyba při odesílání embed zprávy: {e}")
+            print(f"❌ [game_events] Chyba při editaci embed zprávy: {e}")
