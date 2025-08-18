@@ -125,21 +125,6 @@ class MyBot(commands.Bot):
         await asyncio.sleep(30)
         await msg.delete()
 
-
-def start_bot(config):
-    intents = discord.Intents.default()
-    intents.message_content = True
-    intents.members = True
-
-    bot = MyBot(
-        command_prefix="/",
-        intents=intents,
-        guild_id=config["GUILD_ID"],
-        clan_tag=config["CLAN_TAG"],
-        config=config
-    )
-    bot.run(config["DISCORD_BOT_TOKEN"])
-
 def start_bot(config): # Funkce pro spuštění bota
     intents = discord.Intents.default() # Vytvoříme defaultní intents
     intents.message_content = True # Povolení obsahu zpráv
