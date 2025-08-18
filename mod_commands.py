@@ -223,38 +223,77 @@ async def setup_mod_commands(bot):
 
     @bot.tree.command(
         name="pridej_varovani",
-        description="Navrhne varování pro hráče podle CoC tagu",
+        description="Navrhne varování pro hráče podle CoC tagu nebo označeného uživatele",
         guild=bot.guild_object
     )
     @app_commands.describe(
-        coc_tag="Clash of Clans tag hráče",
+        uzivatel="Discord uživatel (alternativa k zadání tagu)",
+        coc_tag="Clash of Clans tag hráče (alternativa k označení uživatele)",
         date_time="Datum a čas (DD/MM/YYYY HH:MM)",
         reason="Důvod varování"
     )
     async def pridej_varovani(
             interaction: discord.Interaction,
-            coc_tag: str,
+            uzivatel: discord.Member | None = None,
+            coc_tag: str | None = None,
             reason: str = "Bez udaného důvodu",
             date_time: str | None = None
     ):
         await interaction.response.defer(ephemeral=True, thinking=True)
 
-        if not coc_tag.startswith("#"):
-            coc_tag = f"#{coc_tag}"
+        # 1) Validace: nesmí být současně uzivatel i coc_tag
+        if uzivatel and coc_tag:
+            await send_ephemeral(interaction, "❌ Použij **jen jeden** identifikátor: buď `uzivatel`, nebo `coc_tag`.")
+            return
 
+        # 2) Zjisti CoC tag
+        resolved_tag = None
+        if uzivatel:
+            # dohledání tagu podle označeného uživatele
+            links = get_all_links()  # {discord_id: (coc_tag, coc_name)} :contentReference[oaicite:2]{index=2}
+            entry = links.get(int(uzivatel.id))
+            if not entry or not entry[0]:
+                await send_ephemeral(interaction, f"❌ Uživatel {uzivatel.mention} nemá propojený CoC účet.")
+                return
+            resolved_tag = entry[0]
+        elif coc_tag:
+            # normalizace zadaného tagu
+            resolved_tag = coc_tag.strip().upper()
+        else:
+            # nebyl zadán ani uzivatel ani tag → zkusíme volajícího
+            links = get_all_links()  # :contentReference[oaicite:3]{index=3}
+            entry = links.get(int(interaction.user.id))
+            if not entry or not entry[0]:
+                await send_ephemeral(
+                    interaction,
+                    "❌ Nezadán `uzivatel` ani `coc_tag` a zároveň u tebe není nalezen propojený CoC účet."
+                )
+                return
+            resolved_tag = entry[0]
+
+        # 3) Ujisti se, že tag má správný formát
+        resolved_tag = resolved_tag.upper()
+        if not resolved_tag.startswith("#"):
+            resolved_tag = f"#{resolved_tag}"
+
+        # 4) Validace času
         if date_time:
             try:
                 datetime.strptime(date_time, "%d/%m/%Y %H:%M")
             except ValueError:
-                await send_ephemeral(interaction,
-                                     "❌ Neplatný formát času. Použij formát `DD/MM/YYYY HH:MM`, např. `14/05/2025 18:30`.")
+                await send_ephemeral(
+                    interaction,
+                    "❌ Neplatný formát času. Použij `DD/MM/YYYY HH:MM`, např. `14/05/2025 18:30`."
+                )
                 return
         else:
             date_time = datetime.now().strftime("%d/%m/%Y %H:%M")
 
+        # 5) Odeslání návrhu (zůstává stejné) – pošle se do review kanálu s tlačítky ✅/❌:contentReference[oaicite:4]{index=4}
         try:
-            await notify_single_warning(interaction.client, coc_tag, date_time, reason)
-            await send_ephemeral(interaction, f"✅ Návrh varování pro {coc_tag} byl odeslán ke schválení.")
+            await notify_single_warning(interaction.client, resolved_tag, date_time,
+                                        reason)  # :contentReference[oaicite:5]{index=5}
+            await send_ephemeral(interaction, f"✅ Návrh varování pro {resolved_tag} byl odeslán ke schválení.")
         except Exception as e:
             await send_ephemeral(interaction, f"❌ Chyba při vytváření varování: {e}")
             print(f"❌ [slash/pridej_varovani] {e}")
