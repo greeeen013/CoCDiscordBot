@@ -41,9 +41,9 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
     - Spravuje individuální trofejovou roli
     - Přidává ověřenou roli pokud chybí
     """
-    verified_role = ROLE_VERIFIED
+    verified_role = guild.get_role(1365768439473373235)  # ID role "Ověřený člen klanu"
     if not verified_role:
-        print(f"❌ [role_giver] Role 'Ověřený člen klanu' s ID {ROLE_VERIFIED} nebyla nalezena.")
+        print(f"❌ [role_giver] Role 'Ověřený člen klanu' s ID 1365768439473373235 nebyla nalezena.")
         return
 
     for discord_id, (coc_tag, _) in user_mapping.items():
