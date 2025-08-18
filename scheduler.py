@@ -147,110 +147,73 @@ async def hourly_clan_update(config: dict, bot):
 
             # === CLAN WAR and CLAN WAR LEAGUE ===
             try:
-                print("\n--- Začátek nové iterace scheduleru ---")
-
-                # Normální clan war kontrola
-                print(f"[Clan War] Kontrola normální války pro klan {config['CLAN_TAG']}...")
-                war_data = await fetch_current_war(config['CLAN_TAG'], config)
-                if war_data:
-                    print(f"[Clan War] Data války získána, stav: {war_data.get('state')}")
+                # --- Normální války ---
+                war_data = await api_handler.fetch_current_war(config["CLAN_TAG"])
+                if war_data and war_data.get("state") in ("preparation", "inWar"):
+                    await clan_war_handler.process_war_data(war_data)
+                elif war_data and war_data.get("state") == "warEnded":
                     await clan_war_handler.process_war_data(war_data)
                 else:
-                    print("[Clan War] Žádná aktivní válka nebyla nalezena")
+                    pass  # žádná aktivní war
 
-                # CWL logika
-                cwl_active = room_storage.get("cwl_active") or False
-                current_cwl_round = room_storage.get("current_cwl_round") or 0
+                # --- CWL ---
+                cwl_active = room_storage.get("cwl_active", False)
+                current_round = room_storage.get("current_cwl_round", 0)
 
                 if cwl_active:
-                    print(f"\n🔁 [CWL] Pokračuji v kole {current_cwl_round + 1}")
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
+                    if not group_data:
+                        print("[CWL] Data skupiny nedostupná, končím iteraci.")
+                        return
 
-                    try:
-                        # Získání aktuálních CWL dat
-                        cwl_group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
-                        if not cwl_group_data:
-                            print("[CWL] Nepodařilo se získat CWL data, deaktivuji CWL")
-                            room_storage.set("cwl_active", False)
+                    rounds = group_data.get("rounds", [])
+                    if current_round >= len(rounds):
+                        # Bezpečnostní reset pokud jsme mimo rozsah
+                        print("[CWL] current_cwl_round >= počet kol, resetuji.")
+                        room_storage.set("cwl_active", False)
+                        room_storage.set("current_cwl_round", 0)
+                        return
+
+                    war_tags = rounds[current_round].get("warTags", [])
+                    active_found, ended_found = False, False
+
+                    for tag in war_tags:
+                        if tag == "#0":  # budoucí kolo
+                            continue
+                        war = await api_handler.fetch_league_war(tag)
+                        if not war:
                             continue
 
-                        round_wars = cwl_group_data['rounds'][current_cwl_round]['warTags']
-                        print(f"[CWL] Dostupné war tagy v kole: {', '.join(round_wars)}")
+                        if war["clan"]["tag"] == config["CLAN_TAG"] or war["opponent"]["tag"] == config["CLAN_TAG"]:
+                            await clan_war_handler.process_war_data(war, attacks_per_member=1)
+                            state = war.get("state")
+                            print(f"[CWL] round {current_round + 1} – state: {state}")
+                            if state in ("preparation", "inWar"):
+                                active_found = True
+                                break
+                            elif state == "warEnded":
+                                ended_found = True
 
-                        war_found = False
-                        active_war_found = False
-
-                        for war_tag in round_wars:
-                            if war_tag == "#0":
-                                continue
-
-                            # Načtení dat dané ligové války
-                            war_tag_clean = war_tag.replace('#', '')
-                            war_data = await api_handler.fetch_league_war(war_tag_clean, config)
-                            if not war_data:
-                                continue  # přeskočí, pokud se nepodařilo získat data
-
-                            # **Ověření, jestli je náš klan součástí této války:**
-                            our_tag = config["CLAN_TAG"].upper()
-                            clan_tag = war_data.get('clan', {}).get('tag', '').upper()
-                            opponent_tag = war_data.get('opponent', {}).get('tag', '').upper()
-                            if our_tag not in (clan_tag, opponent_tag):
-                                print(f"[CWL] Válka {war_tag} se netýká našeho klanu, přeskočena.")
-                                continue  # pokud náš klan není ani na jedné straně, ignorujeme tuto válku
-
-                            # Pokud jsme došli sem, válka se týká našeho klanu – můžeme ji zpracovat
-                            print(f"[CWL] Zpracovávám válku s tagem: {war_tag}")
-                            room_storage.set("current_war_tag", war_tag)
-
-                            try:
-                                war_state = war_data.get('state', 'unknown')
-                                print(f"[CWL] Stav války: {war_state}")
-
-                                await clan_war_handler.process_war_data(war_data, 1)
-
-                                if war_state == 'warEnded':
-                                    war_found = True
-                                elif war_state in ['preparation', 'inWar']:
-                                    active_war_found = True
-                                    break # při nalezení aktivní války našeho klanu ukončíme cyklus
-
-                            except Exception as e:
-                                print(f"[CWL] Chyba při načítání války: {str(e)}")
-
-                        # Pokud jsme našli warEnded válku a žádná aktivní nebyla
-                        if war_found and not active_war_found:
-                            new_round = current_cwl_round + 1
-                            room_storage.set("current_cwl_round", new_round)
-                            print(f"➡️ [CWL] Uloženo nové kolo: {new_round + 1}")
-
-                            if new_round >= len(cwl_group_data['rounds']):
-                                room_storage.set("cwl_active", False)
-                                room_storage.set("current_cwl_round", 0)
-                                print("🔄 [CWL] Resetován CWL stav po dokončení všech kol")
-
-
-
-                        if current_cwl_round >= len(cwl_group_data.get('rounds', [])):
-                            print("[CWL] Aktuální kolo je větší než počet kol v CWL, resetuji")
+                    if ended_found and not active_found:
+                        new_round = current_round + 1
+                        if new_round >= len(rounds):
+                            print("[CWL] Dokončena všechna kola – vypínám CWL.")
                             room_storage.set("cwl_active", False)
                             room_storage.set("current_cwl_round", 0)
-                            continue
+                        else:
+                            print(f"[CWL] Přechod na další kolo: {new_round + 1}")
+                            room_storage.set("current_cwl_round", new_round)
 
-                    except Exception as e:
-                        print(f"[CWL] Chyba při zpracování CWL: {str(e)}")
-
-                # Detekce nového CWL
                 else:
-                    print("[CWL] Kontrola zda neběží CWL...")
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
-                    if group_data:
+                    # Zkontroluj, zda začíná nová CWL sezóna
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
+                    if group_data and group_data.get("state") in ("preparation", "inWar"):
+                        print("[CWL] Detekován nový CWL, aktivuji.")
                         room_storage.set("cwl_active", True)
                         room_storage.set("current_cwl_round", 0)
-                        print("[CWL] Detekován nový CWL, aktivován")
-                    else:
-                        print("[CWL] Žádná aktivní CWL skupina nebyla nalezena (není CWL období)")
 
             except Exception as e:
-                print(f"[ERROR] Neočekávaná chyba v scheduleru: {str(e)}")
+                print(f"[SCHEDULER] Chyba v CWL/war sekci: {e}")
 
 
         else:
