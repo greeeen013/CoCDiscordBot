@@ -148,7 +148,7 @@ async def hourly_clan_update(config: dict, bot):
             # === CLAN WAR and CLAN WAR LEAGUE ===
             try:
                 # --- Normální války ---
-                war_data = await api_handler.fetch_current_war(config["CLAN_TAG"])
+                war_data = await api_handler.fetch_current_war(config["CLAN_TAG"], config)
                 if war_data and war_data.get("state") in ("preparation", "inWar"):
                     await clan_war_handler.process_war_data(war_data)
                 elif war_data and war_data.get("state") == "warEnded":
