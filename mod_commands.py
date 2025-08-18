@@ -970,8 +970,6 @@ async def setup_mod_commands(bot):
                 ("seznam_propojeni", "Seznam propojení Discord ↔ CoC."),
                 ("pridej_varovani", "Přidá/naplánuje varování pro hráče."),
                 ("vypis_varovani", "Vypíše varování. Bez parametrů kdokoli ověřený; s parametry jen Co-Leader."),
-                ("propojit_ucet", "Propojí Discord účet s CoC účtem a přidá roli Verified."),
-                ("odpoj_ucet", "Zruší propojení účtu a odebere roli Verified."),
             ]
 
             # Permission matrix by role
@@ -984,9 +982,6 @@ async def setup_mod_commands(bot):
                     return role in ("Co-Leader",)
                 if cmd == "vypis_varovani":
                     # Verified: own/no params; Elder: jako Verified; Co-Leader: full
-                    return True
-                if cmd in ("propojit_ucet", "odpoj_ucet"):
-                    # kdokoli může vyvolat pro sebe; ověření probíhá uvnitř
                     return True
                 return False
 
