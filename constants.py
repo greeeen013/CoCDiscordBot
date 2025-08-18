@@ -38,3 +38,9 @@ max_heroes_lvls = {
             17: {"Barbarian King": 100, "Archer Queen": 100, "Grand Warden": 75, "Royal Champion": 50,
                  "Minion Prince": "90"},
         }
+
+# === Discord Role IDs ===
+ROLE_VERIFIED = 1365768439473373235   # ověřený člen klanu
+ROLE_ELDER    = 1366106980732633118   # Elder
+ROLE_CO_LEADER= 1366106931042975845   # Co-Leader
+ROLES_STAFF   = (ROLE_CO_LEADER, ROLE_ELDER)
