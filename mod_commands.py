@@ -436,121 +436,208 @@ async def setup_mod_commands(bot):
 
     @bot.tree.command(
         name="kdo_neodehral",
-        description="Vypíše hráče, kteří dosud neodehráli útok ve válce.",
+        description="Vypíše stav války a hráče podle zbývajících útoků (s rozdělením na propojené a nepropojené).",
         guild=bot.guild_object
     )
     @app_commands.describe(
-        zbyva="Zobrazit hráče, kteří mají ještě zbývající útoky (default: False, zobrazí hráče bez útoků)"
+        oba_utoky="Pokud True: ukaž i hráče, kterým zbývá 1+ útok (v CW tedy i ti s 1/2)."
     )
-    async def kdo_neodehral(interaction: discord.Interaction, zbyva: bool = False):
-        # ✅ Povolení: Elder, Co-Leader nebo Administrátor
+    async def kdo_neodehral(interaction: discord.Interaction, oba_utoky: bool = False):
+        # --- Povolení ---
         if not (_is_admin(interaction.user) or _is_co_leader(interaction.user) or _is_elder(interaction.user)):
-            await send_ephemeral(interaction, "❌ Tento příkaz může použít pouze **Elder**, **Co-Leader** nebo **Administrátor**.")
+            await send_ephemeral(interaction,
+                                 "❌ Tento příkaz může použít pouze **Elder**, **Co-Leader** nebo **Administrátor**.")
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
 
+        # --- Handlery / konfig ---
         clan_war_handler = getattr(bot, "clan_war_handler", None)
         if clan_war_handler is None:
             clan_war_handler = ClanWarHandler(bot, bot.config)
             bot.clan_war_handler = clan_war_handler
 
-        # Získání války - nejprve zkusíme CWL
-        war_data = None
-        attacks_per_member = 1  # Default pro CWL
+        our_tag = bot.config["CLAN_TAG"].upper()
 
-        # 1. Získání CWL války
+        # --- 1) Stáhni CWL i běžnou CW a vyber to, co opravdu probíhá ---
+        selected_war = None
+        selected_is_cwl = False
+
+        # CWL?
         cwl_active = room_storage.get("cwl_active")
+        cwl_data = None
         if cwl_active:
             war_tag = room_storage.get("current_war_tag")
             if war_tag and war_tag != "#0":
                 war_tag_clean = war_tag.replace('#', '')
-                war_data = await api_handler.fetch_league_war(war_tag_clean, bot.config)
+                cwl_data = await api_handler.fetch_league_war(war_tag_clean, bot.config)
+                if cwl_data:
+                    c_tag = cwl_data.get('clan', {}).get('tag', '').upper()
+                    o_tag = cwl_data.get('opponent', {}).get('tag', '').upper()
+                    if our_tag not in (c_tag, o_tag):
+                        cwl_data = None
 
-                if war_data:
-                    # Kontrola zda válka obsahuje náš klan
-                    our_tag = bot.config["CLAN_TAG"].upper()
-                    clan_tag = war_data.get('clan', {}).get('tag', '').upper()
-                    opponent_tag = war_data.get('opponent', {}).get('tag', '').upper()
+        # Normální CW
+        cw_data = await fetch_current_war(bot.clan_tag, bot.config)
 
-                    if our_tag not in (clan_tag, opponent_tag):
-                        war_data = None  # Náš klan není v této válce
+        def state_priority(d):
+            s = (d or {}).get("state")
+            return {"inWar": 2, "preparation": 1}.get(s, 0)
 
-        # 2. Pokud nemáme platnou CWL válku, zkusíme normální válku
-        if not war_data:
-            war_data = await fetch_current_war(bot.clan_tag, bot.config)
-            attacks_per_member = 2  # Pro normální válku
+        candidates = []
+        if cwl_data: candidates.append(("cwl", cwl_data))
+        if cw_data:  candidates.append(("cw", cw_data))
 
-        # Zpracování dat války
-        if not war_data or war_data.get("state") is None:
+        if candidates:
+            # Preferuj vyšší prioritu stavu; při shodě preferuj CW před CWL
+            candidates.sort(key=lambda x: (state_priority(x[1]), 1 if x[0] == "cwl" else 2), reverse=True)
+            selected_is_cwl, selected_war = (candidates[0][0] == "cwl"), candidates[0][1]
+
+        if not selected_war or selected_war.get("state") is None:
             await send_ephemeral(interaction, "❌ Nepodařilo se získat data o aktuální klanové válce.")
             return
 
-        state = war_data["state"]
+        war_data = dict(selected_war)  # kopie
 
+        # --- 2) Zajisti, že náš klan je v klíči 'clan' (jinak prohoď strany) ---
+        if war_data.get('opponent', {}).get('tag', '').upper() == our_tag:
+            war_data['clan'], war_data['opponent'] = war_data['opponent'], war_data['clan']
+
+        # --- 3) Počet útoků na člena ---
+        attacks_per_member = war_data.get('attacksPerMember', 1 if selected_is_cwl else 2)
+
+        # --- 4) Časy a formátování ---
+        now = datetime.now(timezone.utc)
+        start_time = clan_war_handler._parse_coc_time(war_data.get('startTime', ''))
+        end_time = clan_war_handler._parse_coc_time(war_data.get('endTime', ''))
+
+        def fmt_delta(seconds: float) -> str:
+            return clan_war_handler._format_remaining_time(seconds)
+
+        # --- 5) Helper: rozdělení na propojené vs. nepropojené a formát po 5 ---
+        async def build_mentions_groups(members: list[dict]) -> tuple[list[str], list[str]]:
+            """
+            Vrací (bez_discord, s_discord) – každý je list řádků,
+            kde každý řádek má max 5 položek a končí ' .'
+            Bez Discord propojení: @herniNick
+            S Discord propojením:  <@discordId> (nepřidáváme @ navíc)
+            """
+            no_discord_raw, with_discord_raw = [], []
+            for m in members:
+                tag = m.get("tag")
+                # herní nick pro kopírování – chceme @nick
+                name = m.get("name", "Unknown")
+                # Discord mention (pokud existuje, očekáváme <@...>)
+                mention = await clan_war_handler._get_discord_mention(tag)
+
+                if mention:
+                    with_discord_raw.append(mention)  # už je to správný mention, nepřidávat '@'
+                else:
+                    # požadovaný formát pro kopírování: @jmeno
+                    no_discord_raw.append(f"@{name}")
+
+            def chunk_five(lst: list[str]) -> list[str]:
+                lines = []
+                for i in range(0, len(lst), 5):
+                    part = " ".join(lst[i:i + 5]) + " ."
+                    lines.append(part)
+                return lines
+
+            return chunk_five(no_discord_raw), chunk_five(with_discord_raw)
+
+        # --- 6) Stavové větve ---
+        state = war_data["state"]
         if state == "notInWar":
             await send_ephemeral(interaction, "⚔️ Momentálně neprobíhá žádná klanová válka.")
             return
 
-        if state == "preparation":
-            await send_ephemeral(interaction, "🛡️ Válka je ve fázi přípravy. Útoky zatím nelze provádět.")
-            return
-
-        # Funkce pro formátování výstupu
-        async def format_missing_players(members, prefix):
-            if not members:
-                await send_ephemeral(interaction, f"{prefix} Všichni členové klanu již provedli své útoky.")
-                return
-
-            await send_ephemeral(interaction, prefix)
-
-            mentions_list = []
-            for m in members:
-                tag = m.get("tag")
-                name = m.get("name", "Unknown").replace('_', r'\_').replace('*', r'\*')
-                discord_mention = await clan_war_handler._get_discord_mention(tag)
-                mentions_list.append(discord_mention or f"@{name}")
-
-            # Rozdělit zmínky do skupin po 5
-            for i in range(0, len(mentions_list), 5):
-                await send_ephemeral(interaction, " ".join(mentions_list[i:i + 5]) + " .")
-
-        # Určení, kteří hráči chybí
         clan_members = war_data.get('clan', {}).get('members', [])
 
-        if state == "warEnded":
-            if zbyva:
-                missing = [m for m in clan_members if len(m.get("attacks", [])) < attacks_per_member]
+        # PŘÍPRAVA
+        if state == "preparation":
+            if start_time:
+                secs = max((start_time - now).total_seconds(), 0.0)
+                await send_ephemeral(
+                    interaction,
+                    f"🛡️ Válka je ve fázi **přípravy**. Bitva začne za **{fmt_delta(secs)}**.\n"
+                    f"(Zdroj: {'CWL' if selected_is_cwl else 'Clan War'})"
+                )
             else:
-                missing = [m for m in clan_members if not m.get("attacks")]
-            await format_missing_players(missing, "🏁 Válka již skončila. Útok neprovedli:")
+                await send_ephemeral(interaction,
+                                     f"🛡️ Válka je ve fázi **přípravy**. (Zdroj: {'CWL' if selected_is_cwl else 'Clan War'})")
             return
 
-        # Pro probíhající válku
-        if zbyva:
-            missing = [m for m in clan_members if len(m.get("attacks", [])) < attacks_per_member]
-        else:
-            missing = [m for m in clan_members if len(m.get("attacks", [])) == 0]
+        # BATTLE DAY
+        if state == "inWar":
+            if oba_utoky:
+                missing = [m for m in clan_members if len(m.get("attacks", [])) < attacks_per_member]
+                label = "Hráči, kterým **zbývá alespoň 1 útok**:"
+            else:
+                missing = [m for m in clan_members if len(m.get("attacks", [])) == 0]
+                label = "Hráči, kteří **neprovedli žádný útok**:"
 
-        # Získání zbývajícího času
-        end_time = clan_war_handler._parse_coc_time(war_data.get('endTime', ''))
-        if end_time:
-            remaining = end_time - datetime.now(timezone.utc)
-            hours = remaining.seconds // 3600
-            minutes = (remaining.seconds % 3600) // 60
-            time_info = f" (zbývá {hours}h {minutes}m)"
-        else:
             time_info = ""
+            if end_time:
+                secs_left = max((end_time - now).total_seconds(), 0.0)
+                time_info = f" (zbývá **{fmt_delta(secs_left)}**)"
 
-        # Typ války pro výpis
-        war_type = "CWL válka" if cwl_active and war_data and war_data.get("isWarLeague", False) else "Clan War"
+            header = f"⚔️ **Battle Day**{time_info} – {'CWL' if selected_is_cwl else 'Clan War'}."
+            await send_ephemeral(interaction, header)
 
-        if zbyva:
-            await format_missing_players(missing,
-                                         f"⚔️ Probíhá {war_type}{time_info}. Hráči s alespoň 1 zbývajícím útokem:")
-        else:
-            await format_missing_players(missing,
-                                         f"⚔️ Probíhá {war_type}{time_info}. Hráči, kteří neprovedli žádný útok:")
+            if not missing:
+                await send_ephemeral(interaction, "✅ Všichni relevantní hráči mají odehráno.")
+                return
+
+            await send_ephemeral(interaction, label)
+
+            no_discord, with_discord = await build_mentions_groups(missing)
+
+            if no_discord:
+                await send_ephemeral(interaction, "**Bez Discord propojení:**")
+                for line in no_discord:
+                    await send_ephemeral(interaction, line)
+
+            if with_discord:
+                await send_ephemeral(interaction, "**S Discord propojením:**")
+                for line in with_discord:
+                    await send_ephemeral(interaction, line)
+            return
+
+        # WAR ENDED
+        if state == "warEnded":
+            if oba_utoky:
+                missing = [m for m in clan_members if len(m.get("attacks", [])) < attacks_per_member]
+                label = "**Neodehráli všemi dostupnými útoky:**"
+            else:
+                missing = [m for m in clan_members if len(m.get("attacks", [])) == 0]
+                label = "**Neodehráli (0 útoků):**"
+
+            when = ""
+            if end_time:
+                secs_ago = max((now - end_time).total_seconds(), 0.0)
+                when = f" před **{fmt_delta(secs_ago)}**"
+
+            header = f"🏁 Válka skončila{when}. {'(CWL)' if selected_is_cwl else '(Clan War)'}"
+            await send_ephemeral(interaction, header)
+
+            if not missing:
+                await send_ephemeral(interaction, "✅ Nikdo nespadá do zadaného filtru.")
+                return
+
+            await send_ephemeral(interaction, label)
+
+            no_discord, with_discord = await build_mentions_groups(missing)
+
+            if no_discord:
+                await send_ephemeral(interaction, "**Bez Discord propojení (kopírovat):**")
+                for line in no_discord:
+                    await send_ephemeral(interaction, line)
+
+            if with_discord:
+                await send_ephemeral(interaction, "**S Discord propojením:**")
+                for line in with_discord:
+                    await send_ephemeral(interaction, line)
+            return
 
     @bot.tree.command(
         name="propoj_ucet",
