@@ -43,8 +43,8 @@ class RoomIdStorage:
         except Exception as e:
             print(f"[clan_war] [discord_rooms_ids] Chyba při zápisu: {e}")
 
-    def get(self, key: str):
-        return self.data.get(key)
+    def get(self, key: str, default=None):
+        return self.data.get(key, default)
 
     def set(self, key: str, value):
         self.data[key] = value
@@ -219,7 +219,7 @@ async def hourly_clan_update(config: dict, bot):
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(60 * 3)  # každých 5 minut
+        await asyncio.sleep(60 * 3)  # každých 3 minut
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
