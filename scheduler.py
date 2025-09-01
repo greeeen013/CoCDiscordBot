@@ -161,7 +161,7 @@ async def hourly_clan_update(config: dict, bot):
                 current_round = room_storage.get("current_cwl_round", 0)
 
                 if cwl_active:
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
                     if not group_data:
                         print("[CWL] Data skupiny nedostupná, končím iteraci.")
                         return
@@ -206,7 +206,7 @@ async def hourly_clan_update(config: dict, bot):
 
                 else:
                     # Zkontroluj, zda začíná nová CWL sezóna
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
                     if group_data and group_data.get("state") in ("preparation", "inWar"):
                         print("[CWL] Detekován nový CWL, aktivuji.")
                         room_storage.set("cwl_active", True)
