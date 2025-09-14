@@ -43,8 +43,8 @@ class RoomIdStorage:
         except Exception as e:
             print(f"[clan_war] [discord_rooms_ids] Chyba při zápisu: {e}")
 
-    def get(self, key: str):
-        return self.data.get(key)
+    def get(self, key: str, default=None):
+        return self.data.get(key, default)
 
     def set(self, key: str, value):
         self.data[key] = value
@@ -148,7 +148,7 @@ async def hourly_clan_update(config: dict, bot):
             # === CLAN WAR and CLAN WAR LEAGUE ===
             try:
                 # --- Normální války ---
-                war_data = await api_handler.fetch_current_war(config["CLAN_TAG"])
+                war_data = await api_handler.fetch_current_war(config["CLAN_TAG"], config)
                 if war_data and war_data.get("state") in ("preparation", "inWar"):
                     await clan_war_handler.process_war_data(war_data)
                 elif war_data and war_data.get("state") == "warEnded":
@@ -161,7 +161,7 @@ async def hourly_clan_update(config: dict, bot):
                 current_round = room_storage.get("current_cwl_round", 0)
 
                 if cwl_active:
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
                     if not group_data:
                         print("[CWL] Data skupiny nedostupná, končím iteraci.")
                         return
