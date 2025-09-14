@@ -43,8 +43,8 @@ class RoomIdStorage:
         except Exception as e:
             print(f"[clan_war] [discord_rooms_ids] Chyba při zápisu: {e}")
 
-    def get(self, key: str, default=None):
-        return self.data.get(key, default)
+    def get(self, key: str):
+        return self.data.get(key)
 
     def set(self, key: str, value):
         self.data[key] = value
@@ -148,7 +148,7 @@ async def hourly_clan_update(config: dict, bot):
             # === CLAN WAR and CLAN WAR LEAGUE ===
             try:
                 # --- Normální války ---
-                war_data = await api_handler.fetch_current_war(config["CLAN_TAG"], config)
+                war_data = await api_handler.fetch_current_war(config["CLAN_TAG"])
                 if war_data and war_data.get("state") in ("preparation", "inWar"):
                     await clan_war_handler.process_war_data(war_data)
                 elif war_data and war_data.get("state") == "warEnded":
@@ -161,7 +161,7 @@ async def hourly_clan_update(config: dict, bot):
                 current_round = room_storage.get("current_cwl_round", 0)
 
                 if cwl_active:
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
                     if not group_data:
                         print("[CWL] Data skupiny nedostupná, končím iteraci.")
                         return
@@ -206,7 +206,7 @@ async def hourly_clan_update(config: dict, bot):
 
                 else:
                     # Zkontroluj, zda začíná nová CWL sezóna
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
                     if group_data and group_data.get("state") in ("preparation", "inWar"):
                         print("[CWL] Detekován nový CWL, aktivuji.")
                         room_storage.set("cwl_active", True)
@@ -219,7 +219,7 @@ async def hourly_clan_update(config: dict, bot):
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(60 * 3)  # každých 3 minut
+        await asyncio.sleep(60 * 3)  # každých 5 minut
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
@@ -278,4 +278,3 @@ async def verification_check_loop(bot, player_tag, user, verification_channel, c
         # Vždy uklidíme, i když dojde k chybě
         await end_verification(user, verification_channel)
         resume_hourly_update()
-
