@@ -39,13 +39,26 @@ class MyBot(commands.Bot):
         self.log_channel_id = 1371089891621998652
 
     async def setup_hook(self):
-        await setup_mod_commands(self)
+        # 1) načti rozšíření/příkazy
+        await self.load_extension("global_commands")   # tvé nové globální příkazy
+        await setup_mod_commands(self)                      # tvoje stávající/guild příkazy
 
+        # 2) nejdřív globální sync (může trvat než se projeví mimo)
         try:
-            synced = await self.tree.sync(guild=self.guild_object)
-            print(f"✅ [bot_commands] Synchronizováno {len(synced)} příkaz(ů) se serverem {self.guild_object.id}")
+            glob = await self.tree.sync()
+            print(f"🌐 [sync] Globálně synchronizováno {len(glob)} příkaz(ů)")
         except Exception as e:
-            print(f"❌ [bot_commands] Chyba při synchronizaci příkazů: {e}")
+            print(f"❌ [sync] Chyba globálního sync: {e}")
+
+        # 3) PRO OKAMŽITÉ TESTOVÁNÍ: zrcadli globální příkazy do tvé guildy
+        #    => uvidíš je ihned na svém serveru (ostatní servery si počkají na propagaci)
+        try:
+            guild = discord.Object(id=self.config["GUILD_ID"])
+            self.tree.copy_global_to(guild=guild)            # zkopíruje všechny globální příkazy do guildy
+            gsynced = await self.tree.sync(guild=guild)      # okamžitě dostupné
+            print(f"🏠 [sync] Serverově synchronizováno {len(gsynced)} příkaz(ů) pro guildu {guild.id}")
+        except Exception as e:
+            print(f"❌ [sync] Chyba guild sync: {e}")
 
     async def on_ready(self):
         print(f"✅🤖 Přihlášen jako {self.user}")
