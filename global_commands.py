@@ -123,6 +123,8 @@ class GlobalCommands(commands.Cog):
         name="upozorni_me",
         description="Pošlu ti za daný čas soukromou zprávu (např. 1d 1h 1m 1s)."
     )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.describe(
         interval="Relativní čas (např. '1d 1h 1m 1s').",
         zprava="Volitelná zpráva, kterou ti připomenu."
@@ -194,6 +196,8 @@ class GlobalCommands(commands.Cog):
         name="random",
         description="Náhodné číslo (min/max) nebo hod mincí."
     )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.describe(
         min="Dolní mez (výchozí 1)",
         max="Horní mez (výchozí 6)",
