@@ -61,6 +61,7 @@ TOWNHALL_ROLES = {
 
 # Role ID pro Ligy (Custom names)
 LEAGUE_ROLES = {
+    "Unranked": 1365984879405436978,
     "Skeleton 1": 1451932758351020264,
     "Skeleton 2": 1451932759307194552,
     "Skeleton 3": 1451932761865720039,
