@@ -1,37 +1,11 @@
 import discord
 
-from constants import ROLE_VERIFIED
-
-# Role ID pro Townhall levely
-TOWNHALL_ROLES = {
-    17: 1365984171054469180,
-    16: 1365984303535620148,
-    15: 1365984329603354725,
-    14: 1365984372406226994,
-    13: 1365985135463370854,
-    12: 1365984488185659423,
-    11: 1365984518942621806,
-}
-
-# Role ID pro Ligy
-LEAGUE_ROLES = {
-    "Legend League": 1365984556187914292,
-    "Titan League": 1365984696378589214,
-    "Champion League": 1365984718004420730,
-    "Master League": 1365984761918652446,
-    "Crystal League": 1365984789399605368,
-    "Gold League": 1365984815932772402,
-    "Silver League": 1365984834865991720,
-    "Bronze League": 1365984854746861638,
-    "Unranked": 1365984879405436978,
-}
-
-# Správa Leader/CoLeader/Admin (Elder) rolí
-clan_role_mappings = {
-    "leader": 1366106894816510062,
-    "coLeader": 1366106931042975845,
-    "admin": 1366106980732633118  # Admin = Elder v databázi
-}
+from constants import (
+    ROLE_VERIFIED,
+    TOWNHALL_ROLES,
+    LEAGUE_ROLES,
+    CLAN_ROLE_MAPPINGS
+)
 
 async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: list[dict]):
     """
@@ -41,9 +15,9 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
     - Spravuje individuální trofejovou roli
     - Přidává ověřenou roli pokud chybí
     """
-    verified_role = guild.get_role(1365768439473373235)  # ID role "Ověřený člen klanu"
+    verified_role = guild.get_role(ROLE_VERIFIED)  # ID role "Ověřený člen klanu"
     if not verified_role:
-        print(f"❌ [role_giver] Role 'Ověřený člen klanu' s ID 1365768439473373235 nebyla nalezena.")
+        print(f"❌ [role_giver] Role 'Ověřený člen klanu' s ID {ROLE_VERIFIED} nebyla nalezena.")
         return
 
     for discord_id, (coc_tag, _) in user_mapping.items():
@@ -63,24 +37,17 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
 
         player_clan_role = player_data.get("role", "").lower()
 
-        # 👑 === Správa clan rolí (Leader / CoLeader / Elder(Admin)) ===
+        # 👑 === Správa clan rolí (Leader / CoLeader / Admin/Elder) ===
         # Vyber správnou roli podle aktuální role v klanu
-        if player_clan_role == "leader":
-            current_role_id = 1366106894816510062
-        elif player_clan_role == "coleader":
-            current_role_id = 1366106931042975845
-        elif player_clan_role == "admin":
-            current_role_id = 1366106980732633118
-        else:
-            current_role_id = None  # Pokud je něco jiného (třeba "member"), tak nic nedělat
+        current_role_id = CLAN_ROLE_MAPPINGS.get(player_clan_role)
 
-        # Pokud máme určeno, jaká role má být
+        # Pokud máme určeno, jaká role má být (member ji mít nemusí, tedy None)
         if current_role_id:
             desired_role = guild.get_role(current_role_id)
 
             if desired_role:
                 # 🧹 Nejdřív odstraníme všechny ostatní clan role (Leader, CoLeader, Elder/Admin)
-                clan_role_ids = {1366106894816510062, 1366106931042975845, 1366106980732633118}
+                clan_role_ids = set(CLAN_ROLE_MAPPINGS.values())
 
                 for role in member.roles:
                     if role.id in clan_role_ids and role != desired_role:
@@ -139,10 +106,12 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
 
 
         # 🏆 === Nastavení League role ===
-        # Získáme základní název ligy (jen první dvě slova)
-        base_league_name = " ".join(league_name.split()[:2])
+        # League Name z databáze je nyní např. "Dragon League 29"
+        # Klíče v LEAGUE_ROLES jsou "Dragon 29"
+        # Musíme odstranit " League" pokud tam je
+        league_role_key = league_name.replace(" League", "")
 
-        league_role_id = LEAGUE_ROLES.get(base_league_name)
+        league_role_id = LEAGUE_ROLES.get(league_role_key)
         if league_role_id:
             league_role = guild.get_role(league_role_id)
 
@@ -159,11 +128,11 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
             if league_role and league_role not in member.roles:
                 try:
                     await member.add_roles(league_role)
-                    print(f"✅ [role_giver] Přidána liga {base_league_name} hráči {member.display_name}.")
+                    print(f"✅ [role_giver] Přidána liga {league_name} ({league_role_key}) hráči {member.display_name}.")
                 except Exception as e:
                     print(f"❌ [role_giver] Chyba při přidávání League role: {e}")
         else:
-            print(f"⚠️ [role_giver] Pro ligu {base_league_name} není definována role.")
+             print(f"⚠️ [role_giver] Role Key '{league_role_key}' nemá definované ID v LEAGUE_ROLES.")
 
         # 🧹 Čištění starých trofejových rolí bez členů
         for role in guild.roles:
@@ -176,7 +145,7 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
 
         # === Správa individuální trofejové role ===
         # Vždy hledáme, jestli existuje role s novým jménem
-        new_trophies_name = f"⁣          🏆{trophies} Pohárků🏆            ⁣"
+        new_trophies_name = f"🏆{trophies} Pohárků🏆" #            ⁣
         existing_role = discord.utils.get(guild.roles, name=new_trophies_name)
 
         if existing_role:
