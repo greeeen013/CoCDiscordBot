@@ -1,5 +1,5 @@
 import discord
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 import json
 import os
@@ -56,6 +56,168 @@ class ClanCapitalHandler:
         self._last_state = None                                                         # Sleduje předchozí stav (např. 'ongoing', 'ended')
         self._has_announced_end = False                                                 # Flag pro sledování, zda byl oznámen konec raidu
         self._best_result_sent = False                                                  # Flag pro sledování, zda byl odeslán nejlepší výsledek
+        self.warnings_file = os.path.join(THIS_DIR, "capital_warnings.json")
+        self.pending_warnings = {}                                                      # {district_id: {attacker_tag: timestamp}}
+        self.sent_warnings = set()                                                      # {unique_id}
+        self.load_warnings()
+
+    def load_warnings(self):
+        """Načte stav varování z JSON souboru."""
+        if os.path.exists(self.warnings_file):
+            try:
+                with open(self.warnings_file, "r") as f:
+                    data = json.load(f)
+                    self.pending_warnings = data.get("pending", {})
+                    self.sent_warnings = set(data.get("sent_ids", []))
+            except Exception as e:
+                print(f"❌ [clan_capital] Chyba při načítání varování: {e}")
+
+    def save_warnings(self):
+        """Uloží stav varování do JSON souboru."""
+        try:
+            data = {
+                "pending": self.pending_warnings,
+                "sent_ids": list(self.sent_warnings)
+            }
+            with open(self.warnings_file, "w") as f:
+                json.dump(data, f)
+        except Exception as e:
+            print(f"❌ [clan_capital] Chyba při ukládání varování: {e}")
+
+    async def check_warnings(self, capital_data: dict):
+        """
+        Zkontroluje podmínky pro varování:
+        1. Hráč nechal district na >75% a má ještě útok (trvá > 6 minut).
+        2. Hráč nechal district na >75% a někdo jiný ho dodělal (a původní měl útoky).
+        """
+        if not capital_data:
+            return
+
+        # 1. Zjistíme zbývající útoky pro všechny členy
+        members_map = {} # tag -> remaining_attacks
+        for m in capital_data.get("members", []):
+            limit = m.get("attackLimit", 0) + m.get("bonusAttackLimit", 0)
+            used = m.get("attacks", 0)
+            remaining = limit - used
+            members_map[m.get("tag")] = remaining
+
+        # 2. Projdeme aktivní/nedávný raid (hledáme ten ongoing nebo ended, který je relevantní)
+        # Většinou nás zajímá ongoing, nebo ended pokud zrovna skončil.
+        # Ale pozor, warningy chceme posílat hlavně live.
+        # V example JSON je 'items' s jedním 'ongoing' prvkem.
+        # capital_data je obvykle ten jeden prvek (z process_capital_data se volá s `capital_data` což je item).
+        
+        attack_log = capital_data.get("attackLog", [])
+        
+        # Projdeme všechny defendery v attackLogu (což jsou klany, na které útočíme)
+        for raid_clan in attack_log:
+            districts = raid_clan.get("districts", [])
+            for district in districts:
+                district_id = str(district.get("id"))
+                district_name = district.get("name")
+                attacks = district.get("attacks", []) # Seznam útoků, předpokládáme [nejnovější, ..., nejstarší]
+                
+                if not attacks:
+                    continue
+
+                # --- SCÉNÁŘ B: Někdo to "vyžral" (Stolen) ---
+                # Procházíme útoky a hledáme situaci: Útok A (>75%), pak Útok B (jiný hráč).
+                # attacks je [Last, Prev, PrevPrev...]
+                for i in range(len(attacks) - 1):
+                    current_attack = attacks[i]      # Novější
+                    previous_attack = attacks[i+1]   # Starší (ten co to nechal)
+                    
+                    prev_percent = previous_attack.get("destructionPercent", 0)
+                    
+                    # Pokud ten předchozí to nechal na >= 75% a < 100%
+                    if 75 < prev_percent < 100:
+                        prev_tag = previous_attack.get("attacker", {}).get("tag")
+                        curr_tag = current_attack.get("attacker", {}).get("tag")
+                        
+                        # A útočník se změnil
+                        if prev_tag != curr_tag:
+                            # A ten předchozí MÁ (stále) k dispozici útoky
+                            if members_map.get(prev_tag, 0) > 0:
+                                warning_id = f"stolen-{district_id}-{prev_tag}-{i}" # Unique ID pro tuto událost
+                                
+                                if warning_id not in self.sent_warnings:
+                                    prev_name = previous_attack.get("attacker", {}).get("name")
+                                    curr_name = current_attack.get("attacker", {}).get("name")
+                                    
+                                    msg = (f"⚠️ **Clan Capital Warning (Stolen Warning)**\n"
+                                           f"Hráč **{prev_name}** nechal district `{district_name}` na **{prev_percent}%** "
+                                           f"a měl ještě útoky!\n"
+                                           f"District následně napadl/dodelal **{curr_name}**.")
+                                           
+                                    await self.send_log_message(msg)
+                                    self.sent_warnings.add(warning_id)
+                                    self.save_warnings()
+
+                # --- SCÉNÁŘ A: Ongoing "zaseknutí" ---
+                # Zajímá nás jen nejnovější stav districtu
+                latest_attack = attacks[0]
+                latest_percent = latest_attack.get("destructionPercent", 0)
+                
+                # Pokud je district "živý" (není 100%) a je > 75%
+                if 75 < latest_percent < 100:
+                    attacker_tag = latest_attack.get("attacker", {}).get("tag")
+                    attacker_name = latest_attack.get("attacker", {}).get("name")
+                    
+                    # Má útočník ještě útoky?
+                    if members_map.get(attacker_tag, 0) > 0:
+                        pending_key = f"{district_id}-{attacker_tag}"
+                        now_ts = datetime.now(timezone.utc).timestamp()
+                        
+                        warning_id = f"stuck-{district_id}-{attacker_tag}"
+                        
+                        # Pokud o něm ještě nevíme, začneme stopovat čas
+                        if pending_key not in self.pending_warnings:
+                            self.pending_warnings[pending_key] = now_ts
+                            self.save_warnings()
+                            print(f"[TIME] [clan_capital] Warning countdown started for {attacker_name} on {district_name} ({latest_percent}%).")
+                        else:
+                            # Už o něm víme, zkontrolujeme čas
+                            start_ts = self.pending_warnings[pending_key]
+                            # 6 minut = 360 sekund
+                            if (now_ts - start_ts) > 360:
+                                if warning_id not in self.sent_warnings:
+                                    msg = (f"⚠️ **Clan Capital Warning (Incomplete District)**\n"
+                                           f"Hráč **{attacker_name}** nechal district `{district_name}` na **{latest_percent}%** "
+                                           f"již déle než 6 minut a stále má nevyužité útoky!")
+                                    
+                                    await self.send_log_message(msg)
+                                    self.sent_warnings.add(warning_id)
+                                    self.save_warnings()
+                    else:
+                        # Pokud už nemá útoky, vyhodíme z pending (už nemůže dokončit)
+                        pending_key = f"{district_id}-{attacker_tag}"
+                        if pending_key in self.pending_warnings:
+                            del self.pending_warnings[pending_key]
+                            self.save_warnings()
+                else:
+                    # District je 100% nebo < 75%, vyčistíme pending pokud existuje pro posledního útočníka
+                    if attacks:
+                        attacker_tag = attacks[0].get("attacker", {}).get("tag")
+                        pending_key = f"{district_id}-{attacker_tag}"
+                        if pending_key in self.pending_warnings:
+                            del self.pending_warnings[pending_key]
+                            self.save_warnings()
+
+    async def send_log_message(self, content: str):
+        """Odešle zprávu do logovacího kanálu."""
+        log_channel_id = getattr(self.bot, "log_channel_id", None)
+        if log_channel_id:
+            channel = self.bot.get_channel(log_channel_id)
+            if channel:
+                try:
+                    await channel.send(content)
+                except Exception as e:
+                    print(f"❌ [clan_capital] Nepodařilo se poslat varování: {e}")
+            else:
+                 print(f"❌ [clan_capital] Logovací kanál {log_channel_id} nebyl nalezen.")
+        else:
+            print("❌ [clan_capital] ID logovacího kanálu není nastaveno.")
+
 
     def _create_capital_embed(self, state: str, data: dict) -> discord.Embed:
         """
@@ -179,6 +341,7 @@ class ClanCapitalHandler:
             self._has_announced_end = False
             embed = self._create_capital_embed(state, capital_data)
             await self.update_capital_message(embed)
+            await self.check_warnings(capital_data)
 
         else:
             print("ℹ️ [clan_capital] Stav 'ended' – embed se již dál nemění.")
