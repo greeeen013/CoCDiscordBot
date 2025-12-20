@@ -145,7 +145,7 @@ async def update_roles(guild: discord.Guild, user_mapping: dict, clan_members: l
 
         # === Správa individuální trofejové role ===
         # Vždy hledáme, jestli existuje role s novým jménem
-        new_trophies_name = f"🏆{trophies} Pohárků🏆" #            ⁣
+        new_trophies_name = f"⁣            🏆{trophies} Pohárků🏆            ⁣" #            ⁣
         existing_role = discord.utils.get(guild.roles, name=new_trophies_name)
 
         if existing_role:
