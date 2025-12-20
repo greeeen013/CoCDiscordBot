@@ -161,7 +161,7 @@ async def hourly_clan_update(config: dict, bot):
                 current_round = room_storage.get("current_cwl_round", 0)
 
                 if cwl_active:
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
+                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
                     if not group_data:
                         print("[CWL] Data skupiny nedostupná, končím iteraci.")
                         room_storage.set("cwl_active", False)
@@ -218,7 +218,7 @@ async def hourly_clan_update(config: dict, bot):
         else:
             print("⏸️ [Scheduler] Aktualizace seznamu klanu je momentálně pozastavena kvůli ověřování.")
 
-        await asyncio.sleep(60 * 3)  # každých 5 minut
+        await asyncio.sleep(60 * 3)  # každých 3 minut
 
 # === Funkce pro pozastavení hodinového updatu ===
 def pause_hourly_update():
