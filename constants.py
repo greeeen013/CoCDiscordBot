@@ -98,10 +98,249 @@ LEAGUE_ROLES = {
     "Legend": 1451932825631723682,
 }
 
+LEAGUE_EMOJIS = {
+    "league_unranked": "<:league_unranked:1451957963123200041>",
+    "league_skeleton": "<:league_skeleton:1451956784897200241>",
+    "league_barbarian": "<:league_barbarian:1451956787514314816>",
+    "league_archer": "<:league_archer:1451956789967851660>",
+    "league_wizard": "<:league_wizard:1451956791628796070>",
+    "league_valkyrie": "<:league_valkyrie:1451956793621086279>",
+    "league_witch": "<:league_witch:1451956795173109790>",
+    "league_golem": "<:league_golem:1451956796435730484>",
+    "league_pekka": "<:league_pekka:1451956798687805510>",
+    "league_titan": "<:league_titan:1451957965429936239>",
+    "league_dragon": "<:league_dragon:1451956800583630900>",
+    "league_electro": "<:league_electro:1451956803503128708>",
+    "league_legend": "<:league_legend:1451957967342665891>",
+}
 
 # Správa Leader/CoLeader/Admin (Elder) rolí
 CLAN_ROLE_MAPPINGS = {
     "leader": ROLE_LEADER,
     "coleader": ROLE_CO_LEADER,
     "admin": ROLE_ELDER  # Admin = Elder v databázi
+}
+
+# ===== KONSTANTY PRO PETY =====
+# Mapování TH na max Pet House level
+TH_TO_PET_HOUSE = {
+    14: 4,
+    15: 8,
+    16: 10,
+    17: 11
+}
+
+# Max levely pro každý Pet podle úrovně Pet House
+PET_MAX_LEVELS = {
+    1: {"L.A.S.S.I": 10, "Electro Owl": 0, "Mighty Yak": 0, "Unicorn": 0, "Frosty": 0, "Diggy": 0,
+        "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+    2: {"L.A.S.S.I": 10, "Electro Owl": 10, "Mighty Yak": 0, "Unicorn": 0, "Frosty": 0, "Diggy": 0,
+        "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+    3: {"L.A.S.S.I": 10, "Electro Owl": 10, "Mighty Yak": 10, "Unicorn": 0, "Frosty": 0, "Diggy": 0,
+        "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+    4: {"L.A.S.S.I": 10, "Electro Owl": 10, "Mighty Yak": 10, "Unicorn": 10, "Frosty": 0, "Diggy": 0,
+        "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+    5: {"L.A.S.S.I": 15, "Electro Owl": 10, "Mighty Yak": 10, "Unicorn": 10, "Frosty": 10, "Diggy": 0,
+        "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+    6: {"L.A.S.S.I": 15, "Electro Owl": 15, "Mighty Yak": 10, "Unicorn": 10, "Frosty": 10, "Diggy": 10,
+        "Poison Lizard": 0, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+    7: {"L.A.S.S.I": 15, "Electro Owl": 15, "Mighty Yak": 15, "Unicorn": 10, "Frosty": 10, "Diggy": 10,
+        "Poison Lizard": 10, "Phoenix": 0, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+    8: {"L.A.S.S.I": 15, "Electro Owl": 15, "Mighty Yak": 15, "Unicorn": 15, "Frosty": 10, "Diggy": 10,
+        "Poison Lizard": 10, "Phoenix": 10, "Spirit Fox": 0, "Angry Jelly": 0, "Sneezy": 0},
+    9: {"L.A.S.S.I": 15, "Electro Owl": 15, "Mighty Yak": 15, "Unicorn": 15, "Frosty": 15, "Diggy": 10,
+        "Poison Lizard": 10, "Phoenix": 10, "Spirit Fox": 10, "Angry Jelly": 0, "Sneezy": 0},
+    10: {"L.A.S.S.I": 15, "Electro Owl": 15, "Mighty Yak": 15, "Unicorn": 15, "Frosty": 15, "Diggy": 15,
+         "Poison Lizard": 10, "Phoenix": 10, "Spirit Fox": 10, "Angry Jelly": 10, "Sneezy": 0},
+    11: {"L.A.S.S.I": 15, "Electro Owl": 15, "Mighty Yak": 15, "Unicorn": 15, "Frosty": 15, "Diggy": 15,
+         "Poison Lizard": 15, "Phoenix": 10, "Spirit Fox": 10, "Angry Jelly": 10, "Sneezy": 10}
+}
+
+EQUIPMENT_DATA = {
+    1: {
+        "unlock": "Earthquake Boots",
+        "common": 9,
+        "epic": 12,
+        "th_required": 8
+    },
+    2: {
+        "unlock": "Giant Arrow",
+        "common": 9,
+        "epic": 12,
+        "th_required": 9
+    },
+    3: {
+        "unlock": "Vampstache, Metal Pants",
+        "common": 12,
+        "epic": 15,
+        "th_required": 10
+    },
+    4: {
+        "unlock": "Rage Gem",
+        "common": 12,
+        "epic": 15,
+        "th_required": 11
+    },
+    5: {
+        "unlock": "Healer Puppet, Noble Iron",
+        "common": 15,
+        "epic": 18,
+        "th_required": 12
+    },
+    6: {
+        "unlock": "Healing Tome",
+        "common": 15,
+        "epic": 18,
+        "th_required": 13
+    },
+    7: {
+        "unlock": "Hog Rider Puppet",
+        "common": 18,
+        "epic": 21,
+        "th_required": 14
+    },
+    8: {
+        "unlock": "Haste Vial",
+        "common": 18,
+        "epic": 24,
+        "th_required": 15
+    },
+    9: {
+        "unlock": "Žádné nové (max level)",
+        "common": 18,
+        "epic": 27,
+        "th_required": 16
+    }
+}
+
+# Mapování TH na max Blacksmith level
+TH_TO_BLACKSMITH = {
+    8: 1,
+    9: 2,
+    10: 3,
+    11: 4,
+    12: 5,
+    13: 6,
+    14: 7,
+    15: 8,
+    16: 9,
+    17: 9,  # TH17 má stejný max jako TH16
+    18: 9 # TH18 má stejný max jako TH17
+}
+
+# ===== ZJEDNODUŠENÉ KONSTANTY PRO LABORATORY =====
+TH_TO_LAB = {
+    3: 1,
+    4: 2,
+    5: 3,
+    6: 4,
+    7: 5,
+    8: 6,
+    9: 7,
+    10: 8,
+    11: 9,
+    12: 10,
+    13: 11,
+    14: 12,
+    15: 13,
+    16: 14,
+    17: 15,
+    18: 16
+}
+
+TROOP_UPGRADES = {
+    # Elixir Troops
+    "Barbarian": {1: 1, 3: 2, 5: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9, 14: 10, 15: 11, 16: 12},
+    "Archer": {2: 1, 3: 2, 5: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9, 14: 10, 15: 11, 16: 12, 17: 13},
+    "Giant": {3: 1, 4: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9, 13: 10, 15: 11, 16: 12, 17: 13},
+    "Goblin": {2: 1, 3: 2, 5: 3, 7: 4, 8: 5, 9: 6, 10: 7, 12: 8, 15: 9},
+    "Wall Breaker": {3: 1, 4: 2, 6: 3, 7: 4, 8: 5, 10: 6, 11: 7, 12: 8, 13: 9, 14: 10, 15: 11, 16: 12, 17: 13},
+    "Balloon": {4: 2, 6: 3, 7: 4, 8: 5, 9: 6, 11: 7, 12: 8, 13: 9, 14: 10, 16: 11},
+    "Wizard": {5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9, 13: 10, 15: 11, 16: 12, 17: 13},
+    "Healer": {7: 2, 8: 3, 9: 4, 11: 5, 13: 6, 14: 7, 15: 8, 16: 9, 17: 10},
+    "Dragon": {7: 2, 8: 3, 9: 4, 10: 5, 11: 6, 12: 7, 13: 8, 14: 9, 15: 10, 16: 11, 17: 12},
+    "P.E.K.K.A": {8: 3, 9: 4, 10: 6, 11: 7, 12: 8, 13: 9, 15: 10, 16: 11, 17: 12},
+    "Baby Dragon": {9: 2, 10: 4, 11: 5, 12: 6, 13: 7, 14: 8, 15: 9, 16: 10, 17: 11},
+    "Miner": {10: 3, 11: 5, 12: 6, 13: 7, 14: 8, 15: 9, 16: 10, 17: 11},
+    "Electro Dragon": {11: 2, 12: 3, 13: 4, 14: 5, 15: 6, 16: 7, 17: 8},
+    "Yeti": {12: 2, 13: 3, 14: 4, 15: 5, 16: 6, 17: 7},
+    "Dragon Rider": {13: 2, 14: 3, 16: 4, 17: 5},
+    "Electro Titan": {14: 2, 15: 3, 16: 4},
+    "Root Rider": {15: 2, 16: 3},
+    "Thrower": {16: 2, 17: 3},
+    
+    # Dark Elixir Troops
+    "Minion": {7: 2, 8: 4, 9: 5, 10: 6, 11: 7, 12: 8, 13: 9, 14: 10, 15: 11, 16: 12, 17: 13},
+    "Hog Rider": {7: 2, 8: 4, 9: 5, 10: 6, 11: 7, 12: 9, 13: 10, 14: 11, 15: 12, 16: 13, 17: 14},
+    "Valkyrie": {8: 2, 9: 4, 10: 5, 11: 6, 12: 7, 13: 8, 14: 9, 15: 10, 16: 11},
+    "Golem": {8: 2, 9: 4, 10: 5, 11: 7, 12: 9, 13: 10, 14: 11, 15: 12, 16: 13, 17: 14},
+    "Witch": {9: 2, 10: 3, 11: 4, 12: 5, 15: 6, 16: 7},
+    "Lava Hound": {9: 2, 10: 3, 11: 4, 12: 5, 13: 6},
+    "Bowler": {10: 2, 11: 3, 12: 4, 13: 5, 14: 6, 15: 7, 16: 8, 17: 9},
+    "Ice Golem": {11: 3, 12: 5, 14: 6, 15: 7, 16: 8, 17: 9},
+    "Headhunter": {12: 2, 13: 3},
+    "Apprentice Warden": {13: 2, 14: 3, 15: 4},
+    "Druid": {14: 2, 15: 3, 16: 4}
+}
+
+SIEGE_MACHINE_UPGRADES = {
+    "Wall Wrecker": {
+        10: (2, 3),
+        11: 4,
+        13: 5
+    },
+    "Battle Blimp": {
+        10: (2, 3),
+        11: 4,
+        13: 5
+    },
+    "Stone Slammer": {
+        10: (2, 3),
+        11: 4,
+        13: 5
+    },
+    "Siege Barracks": {
+        10: (2, 3),
+        11: 4,
+        14: 5
+    },
+    "Log Launcher": {
+        10: (2, 3),
+        11: 4,
+        14: 5
+    },
+    "Flame Flinger": {
+        10: (2, 3),
+        11: 4,
+        14: 5
+    },
+    "Battle Drill": {
+        13: (2, 3, 4),
+        15: 5
+    },
+    "Troop Launcher": {
+        14: (2, 3),
+        15: 4
+    }
+}
+
+SPELL_UPGRADES = {
+    # Elixir Spells
+    "Lightning Spell": {3: 2, 4: 3, 5: 4, 6: 4, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9, 13: 9, 14: 9, 15: 10, 16: 11, 17: 12},
+    "Healing Spell": {4: 2, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 7, 12: 7, 13: 8, 14: 8, 15: 9, 16: 10, 17: 11},
+    "Rage Spell": {5: 2, 6: 3, 7: 4, 8: 5, 9: 5, 10: 5, 11: 5, 12: 6, 13: 6, 14: 6, 15: 6, 16: 6, 17: 6},
+    "Jump Spell": {7: 2, 8: 2, 9: 2, 10: 3, 11: 3, 12: 3, 13: 4, 14: 4, 15: 5, 16: 5, 17: 5},
+    "Freeze Spell": {9: 2, 10: 5, 11: 6, 12: 7, 13: 7, 14: 7, 15: 7, 16: 7, 17: 7},
+    "Clone Spell": {10: 3, 11: 5, 12: 5, 13: 6, 14: 7, 15: 8, 16: 8, 17: 8},
+    "Invisibility Spell": {11: 2, 12: 3, 13: 4, 14: 4, 15: 4, 16: 4, 17: 4},
+    "Recall Spell": {13: 2, 14: 3, 15: 4, 16: 5, 17: 6},
+    "Revive Spell": {15: 2, 16: 3, 17: 4},
+
+    # Dark Spells
+    "Poison Spell": {8: 2, 9: 3, 10: 4, 11: 5, 12: 6, 13: 7, 14: 8, 15: 9, 16: 10, 17: 11},
+    "Earthquake Spell": {8: 2, 9: 3, 10: 4, 11: 5, 12: 5, 13: 5, 14: 5, 15: 5, 16: 5, 17: 5},
+    "Haste Spell": {9: 2, 10: 4, 11: 5, 12: 5, 13: 5, 14: 5, 15: 5, 16: 5, 17: 6},
+    "Skeleton Spell": {10: 3, 11: 4, 12: 6, 13: 7, 14: 7, 15: 8, 16: 8, 17: 8},
+    "Bat Spell": {10: 3, 11: 4, 12: 5, 13: 5, 14: 5, 15: 6, 16: 6, 17: 7},
+    "Overgrowth Spell": {12: 2, 13: 2, 14: 3, 15: 3, 16: 4, 17: 4}
 }
