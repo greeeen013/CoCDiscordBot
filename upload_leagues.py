@@ -49,11 +49,14 @@ async def on_ready():
     
     # Fetch existing emojis to avoid duplicates
     existing_emojis = {emoji.name: emoji for emoji in guild.emojis}
+    uploaded_emojis = {}
 
     async with aiohttp.ClientSession() as session:
         for name, url in LEAGUES.items():
             if name in existing_emojis:
-                print(f"Skipping {name}, already exists.")
+                emoji = existing_emojis[name]
+                print(f"Skipping {name}, already exists (ID: {emoji.id}).")
+                uploaded_emojis[name] = emoji.id
                 continue
 
             print(f"Downloading {name} from {url}...")
@@ -65,6 +68,7 @@ async def on_ready():
                         try:
                             emoji = await guild.create_custom_emoji(name=name, image=data)
                             print(f"Successfully created emoji: {emoji.name} (ID: {emoji.id})")
+                            uploaded_emojis[name] = emoji.id
                         except discord.HTTPException as e:
                              print(f"Failed to upload {name}: {e}")
                     else:
@@ -72,6 +76,16 @@ async def on_ready():
             except Exception as e:
                 print(f"Error processing {name}: {e}")
                 
+    print("\n--- EMOJI DATA ---")
+    print("Dict format:")
+    print(uploaded_emojis)
+    
+    print("\nPython Dict format for constants:")
+    print("LEAGUES = {")
+    for name, emoji_id in uploaded_emojis.items():
+        print(f'    "{name}": "<:{name}:{emoji_id}>",')
+    print("}")
+    
     print("Done!")
     await client.close()
 
