@@ -2,7 +2,10 @@ import discord
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 import json
+import json
 import os
+
+from database import notify_single_warning
 
 EVENT_EMOJIS = {
     "Capital Gold": "<:capital_gold:1370839359896551677>",
@@ -152,6 +155,14 @@ class ClanCapitalHandler:
                                     await self.send_log_message(msg)
                                     self.sent_warnings.add(warning_id)
                                     self.save_warnings()
+
+                                    # Přidání varování
+                                    await notify_single_warning(
+                                        bot=self.bot,
+                                        coc_tag=prev_tag,
+                                        date_time=datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                        reason="nedokončený district v clan capital"
+                                    )
 
                 # --- SCÉNÁŘ A: Ongoing "zaseknutí" ---
                 # Zajímá nás jen nejnovější stav districtu
