@@ -582,10 +582,10 @@ class ClanWarHandler:
             remaining_hours = max(delta.total_seconds() / 3600, 0)
 
             # Pochvala za mirror
-                if (is_our_attack and
-                    attacker_pos == defender_pos and
-                    attack.get("destructionPercentage", 0) == 100 and
-                    remaining_hours >= 5):
+            if (is_our_attack and
+                attacker_pos == defender_pos and
+                attack.get("destructionPercentage", 0) == 100 and
+                remaining_hours >= 5):
                 praise_channel = self.bot.get_channel(PRAISE_CHANNEL_ID) # pošle do místnosti s pochvaly
                 discord_mention = await self._get_discord_mention(attacker.get("tag"))
                 name_or_mention = discord_mention or f"@{attacker.get('name', 'neznámý')}"
