@@ -231,7 +231,7 @@ class ClanCapitalHandler:
         end_ts = int(end.timestamp()) if end else 0
         emoji = EVENT_EMOJIS.get("Capital District", "🏰")
         embed = discord.Embed(
-            title=f"{emoji} Capital Raid: Probíhá",
+            title=f"{emoji} Capital Raid",
             color=discord.Color.purple()
         )
 
@@ -308,6 +308,12 @@ class ClanCapitalHandler:
                     embed.set_footer(text="Stav: ended")
                     await msg.edit(embed=embed)
                     print("✅ [clan_capital] Footer embedu upraven na 'Stav: ended'.")
+                    
+                    # Zapomeneme ID zprávy, aby příští raid začal nový
+                    self.current_capital_message_id = None
+                    save_room_id("capital_status_message", None)
+                    print("🗑️ [clan_capital] ID zprávy smazáno z paměti pro příští raid.")
+
                 except Exception as e:
                     print(f"⚠️ [clan_capital] Nepodařilo se upravit embed: {e}")
 
