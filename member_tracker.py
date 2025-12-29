@@ -107,9 +107,11 @@ async def cleanup_after_coc_departure(bot: discord.Client, coc_tag: str):
 
     links = get_all_links()
     discord_id = None
-    for d_id, (tag, _) in links.items():
+    coc_name = None
+    for d_id, (tag, c_name) in links.items():
         if tag.upper() == coc_tag:
             discord_id = d_id
+            coc_name = c_name
             break
 
     if discord_id is None:
@@ -117,8 +119,12 @@ async def cleanup_after_coc_departure(bot: discord.Client, coc_tag: str):
 
     remove_coc_link(str(discord_id))
 
+    # Zkusíme získat Discord jméno pro hezčí zprávu
+    discord_name = str(discord_id)
     member = guild.get_member(discord_id)
+
     if member:
+        discord_name = member.name
         try:
             roles_to_remove = [r for r in member.roles if r != guild.default_role]
             if roles_to_remove:
@@ -130,16 +136,28 @@ async def cleanup_after_coc_departure(bot: discord.Client, coc_tag: str):
                 pass
         except discord.Forbidden:
             print(f"⚠️ [cleanup] Nemám oprávnění upravit {member.display_name}")
+    else:
+        # Pokud už na serveru není, zkusíme fetch (async)
+        try:
+            user = await bot.fetch_user(discord_id)
+            discord_name = user.name
+        except:
+            pass
 
     channel = guild.get_channel(CLAN_LEAVE_LOG_ID)
     if channel:
+        # Sestavení popisu - přidáme CoC jméno, pokud existuje
+        desc_lines = []
+        if coc_name:
+            desc_lines.append(f"🏰 **{coc_name}**\n")
+
+        desc_lines.append("Snad se jednou vrátíš 😉\n")
+        desc_lines.append("🧹 Tvoje propojení s Clash of Clans bylo odstraněno")
+        desc_lines.append("Role klanu byly odebrány.")
+
         embed = discord.Embed(
-            title=f"👋 Díky, že jsi s námi byl, <@{discord_id}>!",
-            description=(
-                "(ne)budeš nám chybět 😉\n\n"
-                "🧹 Tvoje propojení s Clash of Clans bylo odstraněno\n"
-                "Role klanu byly odebrány."
-            ),
+            title=f"👋 Díky, že jsi s námi byl, {discord_name}!",
+            description="\n".join(desc_lines),
             color=discord.Color.orange()
         )
         embed.set_footer(
