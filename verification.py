@@ -4,8 +4,13 @@ import asyncio
 from database import get_all_links, get_all_members
 from role_giver import update_roles
 
-# Konstanty
-VERIFICATION_CHANNEL_ID = 1366471838070476821
+from constants import (
+    VERIFICATION_CHANNEL_ID,
+    VERIFICATION_ROLE_ID,
+    WELCOME_CHANNEL_ID,
+    RULES_CHANNEL_ID,
+    GENERAL_CHANNEL_ID
+)
 
 # Uchování informací o ověřování
 verification_tasks = {}
@@ -56,7 +61,7 @@ async def start_verification_permission(interaction, player, config):
     author = interaction.user
 
     # Najdeme verifikační roli
-    verification_role = guild.get_role(1372873720254955540)
+    verification_role = guild.get_role(VERIFICATION_ROLE_ID)
     if not verification_role:
         print("❌ Verifikační role nebyla nalezena!")
         return
@@ -102,7 +107,7 @@ async def end_verification(user, verification_channel):
 
     try:
         # Odebrání verifikační role
-        verification_role = verification_channel.guild.get_role(1372873720254955540)
+        verification_role = verification_channel.guild.get_role(VERIFICATION_ROLE_ID)
         if verification_role:
             await user.remove_roles(verification_role)
             print(f"✅ [end_verification] Uživateli {user} byla odebrána verifikační role")
@@ -170,9 +175,9 @@ async def welcome_on_server_message(bot, user):
     Pošle úvodní zprávu do uvítací místnosti pomocí embed zprávy.
     """
 
-    welcome_channel_id = 1365768783083339878 # ID uvítací místnosti
-    rules_channel_id = 1366000196991062086 # ID kanálu s pravidly
-    general_channel_id = 1370722795826450452 # ID obecné místnosti
+    welcome_channel_id = WELCOME_CHANNEL_ID # ID uvítací místnosti
+    rules_channel_id = RULES_CHANNEL_ID # ID kanálu s pravidly
+    general_channel_id = GENERAL_CHANNEL_ID # ID obecné místnosti
 
     channel = bot.get_channel(welcome_channel_id)
 

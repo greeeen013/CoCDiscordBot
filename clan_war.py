@@ -6,7 +6,14 @@ import json
 import os
 
 from database import notify_single_warning, get_all_links
-from constants import TOWN_HALL_EMOJIS
+from constants import (
+    TOWN_HALL_EMOJIS,
+    WAR_INFO_CHANNEL_ID,
+    WAR_EVENTS_CHANNEL_ID,
+    LOG_CHANNEL_ID,
+    ADMIN_USER_ID,
+    PRAISE_CHANNEL_ID
+)
 
 STATE_MAP = {
     "inWar": "Probíhá",
@@ -100,9 +107,9 @@ class ClanWarHandler:
     def __init__(self, bot, config):
         self.bot = bot
         self.config = config
-        self.war_status_channel_id = 1366835944174391379
-        self.war_events_channel_id = 1366835971395686554
-        self.war_ping_channel_id = 1371089891621998652
+        self.war_status_channel_id = WAR_INFO_CHANNEL_ID
+        self.war_events_channel_id = WAR_EVENTS_CHANNEL_ID
+        self.war_ping_channel_id = LOG_CHANNEL_ID
         self.last_processed_order = room_storage.get("last_war_event_order") or 0
         self.current_war_message_id = room_storage.get("war_status_message")
         self._last_state = None
@@ -181,7 +188,7 @@ class ClanWarHandler:
                         continue
 
                     try:
-                        mention = "<@317724566426222592>"
+                        mention = f"<@{ADMIN_USER_ID}>"
                         time_str = self._format_remaining_time(remaining_seconds)
 
                         if mark == 1:
@@ -575,11 +582,11 @@ class ClanWarHandler:
             remaining_hours = max(delta.total_seconds() / 3600, 0)
 
             # Pochvala za mirror
-            if (is_our_attack and
+                if (is_our_attack and
                     attacker_pos == defender_pos and
                     attack.get("destructionPercentage", 0) == 100 and
                     remaining_hours >= 5):
-                praise_channel = self.bot.get_channel(1371170358056452176) # pošle do místnosti s pochvaly
+                praise_channel = self.bot.get_channel(PRAISE_CHANNEL_ID) # pošle do místnosti s pochvaly
                 discord_mention = await self._get_discord_mention(attacker.get("tag"))
                 name_or_mention = discord_mention or f"@{attacker.get('name', 'neznámý')}"
                 if praise_channel:

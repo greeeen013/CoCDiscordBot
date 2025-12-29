@@ -18,7 +18,30 @@ from database import remove_warning, fetch_warnings, notify_single_warning, get_
     add_coc_link, get_all_members
 from role_giver import update_roles
 
-from constants import HEROES_EMOJIS, TOWN_HALL_EMOJIS, max_heroes_lvls, ROLE_VERIFIED, ROLE_ELDER, ROLE_CO_LEADER, TH_TO_PET_HOUSE, PET_MAX_LEVELS, EQUIPMENT_DATA, TH_TO_BLACKSMITH, TH_TO_LAB, TROOP_UPGRADES, SIEGE_MACHINE_UPGRADES, SPELL_UPGRADES
+from constants import (
+    HEROES_EMOJIS, 
+    TOWN_HALL_EMOJIS, 
+    max_heroes_lvls, 
+    ROLE_VERIFIED, 
+    ROLE_ELDER, 
+    ROLE_CO_LEADER, 
+    TH_TO_PET_HOUSE, 
+    PET_MAX_LEVELS, 
+    EQUIPMENT_DATA, 
+    TH_TO_BLACKSMITH, 
+    TH_TO_LAB, 
+    TROOP_UPGRADES, 
+    SIEGE_MACHINE_UPGRADES, 
+    SPELL_UPGRADES,
+    RULES_CHANNEL_ID,
+    VERIFICATION_CHANNEL_ID,
+    WAR_INFO_CHANNEL_ID,
+    WAR_EVENTS_CHANNEL_ID,
+    CAPITAL_STATUS_CHANNEL_ID,
+    CLASH_OF_CLANS_EVENT_CHANNEL_ID,
+    GENERAL_CHANNEL_ID,
+    BOT_USER_ID
+)
 
 
 # === Sdílené ID úložiště ===
@@ -666,7 +689,7 @@ async def setup_mod_commands(bot):
         try:
             add_coc_link(str(uzivatel.id), coc_tag, coc_name)
 
-            role = interaction.guild.get_role(1365768439473373235)
+            role = interaction.guild.get_role(ROLE_VERIFIED)
             if role:
                 try:
                     await uzivatel.add_roles(role, reason="Propojení Clash of Clans účtu")
@@ -708,7 +731,7 @@ async def setup_mod_commands(bot):
         try:
             remove_coc_link(str(uzivatel.id))
 
-            role = interaction.guild.get_role(1365768439473373235)
+            role = interaction.guild.get_role(ROLE_VERIFIED)
             if role and role in uzivatel.roles:
                 try:
                     await uzivatel.remove_roles(role, reason="Odpojení Clash of Clans účtu")
@@ -889,8 +912,8 @@ async def setup_mod_commands(bot):
         embed.add_field(
             name="🔹 Jsi členem našeho klanu?",
             value=(
-                f"1. Projdi si pravidla v {interaction.guild.get_channel(1366000196991062086).mention}\n"
-                f"2. Proveď ověření v {interaction.guild.get_channel(1366471838070476821).mention}\n"
+                f"1. Projdi si pravidla v {interaction.guild.get_channel(RULES_CHANNEL_ID).mention}\n"
+                f"2. Proveď ověření v {interaction.guild.get_channel(VERIFICATION_CHANNEL_ID).mention}\n"
                 "3. Po ověření získáš automaticky:\n"
                 "   - Speciální roli podle postavení v klanu (Leader, Co-leader, Elder...)\n"
                 "   - Role na míru podle počtu pohárků, TH level, Liga\n"
@@ -916,11 +939,11 @@ async def setup_mod_commands(bot):
         embed.add_field(
             name="📊 Co všechno zde najdeš?",
             value=(
-                f"- Přehledné statistiky o Clan War v {interaction.guild.get_channel(1366835944174391379).mention}\n"
-                f"   - Aktuální Clan War útoky a obrany v {interaction.guild.get_channel(1366835971395686554).mention}\n"
-                f"- Detaily o Clan Capital v {interaction.guild.get_channel(1370467834932756600).mention}\n"
-                f"- Herní eventy v {interaction.guild.get_channel(1367054076688339053).mention}\n"
-                f"- Místo pro obecný pokec v {interaction.guild.get_channel(1370722795826450452).mention}\n"
+                f"- Přehledné statistiky o Clan War v {interaction.guild.get_channel(WAR_INFO_CHANNEL_ID).mention}\n"
+                f"   - Aktuální Clan War útoky a obrany v {interaction.guild.get_channel(WAR_EVENTS_CHANNEL_ID).mention}\n"
+                f"- Detaily o Clan Capital v {interaction.guild.get_channel(CAPITAL_STATUS_CHANNEL_ID).mention}\n"
+                f"- Herní eventy v {interaction.guild.get_channel(CLASH_OF_CLANS_EVENT_CHANNEL_ID).mention}\n"
+                f"- Místo pro obecný pokec v {interaction.guild.get_channel(GENERAL_CHANNEL_ID).mention}\n"
                 "- Tipy a triky jak hrát lépe\n"
                 "- A mnohem více!"
             ),
@@ -1023,12 +1046,12 @@ async def setup_mod_commands(bot):
             description=(
                 "- Klikni na tlačítko níže a ověř svůj účet!\n"
                 "- Ověřování je jen pro členy klanu Czech Heroes\n"
-                f"- Nezapomeň si nejprve přečíst pravidla: {interaction.guild.get_channel(1366000196991062086).mention}\n"
+                f"- Nezapomeň si nejprve přečíst pravidla: {interaction.guild.get_channel(RULES_CHANNEL_ID).mention}\n"
                 "- Discord účet bude propojen s Clash of Clans účtem\n"
                 "- Po kliknutí zadáš své jméno nebo #tag\n"
                 "- Provedeš ověření výběrem equipmentu na hrdinu\n"
                 "   - Pokud jsi již ověřený, nelze ověřit znovu\n"
-                f"   - Bot musí být online: <@1363529470778146876>\n"
+                f"   - Bot musí být online: <@{BOT_USER_ID}>\n"
             ),
             color=discord.Color.green()
         )

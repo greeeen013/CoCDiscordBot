@@ -6,15 +6,9 @@ import json
 import os
 
 from database import notify_single_warning
+from constants import CAPITAL_STATUS_CHANNEL_ID, PRAISE_CHANNEL_ID, EVENT_EMOJIS
 
-EVENT_EMOJIS = {
-    "Capital Gold": "<:capital_gold:1370839359896551677>",
-    "Clan Capital": "<:clan_capital:1370710098158026792>",
-    "Capital District": "<:capital_district:1370841273128456392>",
-    "Capital Destroyed District": "<:capital_destroyed_district:1370843785688518706>",
-    "Season End": "<:free_battlepass:1370713363188813865>",
-    "CWL": "<:clan_war_league:1370712275614302309>",
-}
+
 
 # === Nastavení cesty k JSON souboru ===
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -53,8 +47,8 @@ class ClanCapitalHandler:
         """
         self.bot = bot                                                                  # Discord bot instance
         self.config = config                                                            # Konfigurační slovník (obsahuje např. COC API klíč, GUILD_ID apod.)
-        self.capital_status_channel_id = 1370467834932756600                            # ID Discord kanálu, kam se bude embed posílat
-        self.announcement_channel_id = 1371170358056452176                              # ID kanálu pro oznámení nejlepšího výsledku
+        self.capital_status_channel_id = CAPITAL_STATUS_CHANNEL_ID                      # ID Discord kanálu, kam se bude embed posílat
+        self.announcement_channel_id = PRAISE_CHANNEL_ID                                # ID kanálu pro oznámení nejlepšího výsledku
         self.current_capital_message_id = load_room_id("capital_status_message")        # načtení ID zprávy z JSON souboru
         self._last_state = None                                                         # Sleduje předchozí stav (např. 'ongoing', 'ended')
         self._has_announced_end = False                                                 # Flag pro sledování, zda byl oznámen konec raidu

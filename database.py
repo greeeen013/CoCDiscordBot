@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 import discord
 from discord.ui import View, Button
+from constants import ADMIN_WARNING_CHANNEL_ID, ADMIN_USER_ID
 
 # === Cesta k souboru databáze ===
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coc_data_info.sqlite3")
@@ -466,10 +467,10 @@ async def notify_warnings_exceed(bot: discord.Client):
                     coc_name = name_row[0] if name_row else "Neznámý hráč"
                     discord_mention = f"@{coc_name}"
 
-                channel = bot.get_channel(1371105995270393867)
+                channel = bot.get_channel(ADMIN_WARNING_CHANNEL_ID)
                 if channel:
                     msg = (
-                            f"<@317724566426222592>\n"
+                            f"<@{ADMIN_USER_ID}>\n"
                             f"**{tag}**\n"
                             f"{discord_mention}\n"
                             + "\n".join([f"{i + 1}. {dt} – {reason}" for i, (dt, reason) in enumerate(recent_warnings)])
@@ -493,7 +494,7 @@ async def notify_single_warning(bot: discord.Client, coc_tag: str, date_time: st
             result = c.fetchone()
             name = result[0] if result else "Neznámý hráč"
 
-        channel = bot.get_channel(1371105995270393867)
+        channel = bot.get_channel(ADMIN_WARNING_CHANNEL_ID)
         if channel:
             msg = f"{coc_tag}\n@{name}\n{date_time}\n{reason}"
             view = WarningReviewView(coc_tag, name, date_time, reason)

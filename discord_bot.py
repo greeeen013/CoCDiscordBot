@@ -8,7 +8,7 @@ import asyncio # Import knihovny asyncio pro asynchronní programování (např.
 from scheduler import hourly_clan_update # Import funkce pro hodinovou aktualizaci členů klanu
 from bot_commands import VerifikacniView, ConfirmView # Import funkcí a tříd pro nastavení příkazů a ověřovacího pohledu
 from mod_commands import setup_mod_commands # Import funkcí pro nastavení moderátorských příkazů
-from constants import TOWN_HALL_EMOJIS, LEAGUE_EMOJIS
+from constants import TOWN_HALL_EMOJIS, LEAGUE_EMOJIS, LOG_CHANNEL_ID
 
 VERIFICATION_PATH = "verification_data.json" # Definování konstanty s cestou k souboru, kde se ukládá info o zprávě pro verifikaci
 
@@ -26,7 +26,7 @@ class MyBot(commands.Bot):
         self.message_history = defaultdict(lambda: deque(maxlen=10))
         self.timeout_levels = defaultdict(int)  # user_id -> počet porušení
         self.failed_timeout_cache = set()  # user_id -> kdo již selhal s timeoutem
-        self.log_channel_id = 1371089891621998652
+        self.log_channel_id = LOG_CHANNEL_ID
 
     async def setup_hook(self):
         # Načti globální příkazy

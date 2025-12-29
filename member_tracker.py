@@ -7,9 +7,7 @@ from typing import Optional
 from discord.ext import commands
 
 from database import DB_PATH, remove_coc_link, get_all_links  # reuse existující logiku
-
-LOG_CHANNEL_ID = 1371089891621998652
-CLAN_LEAVE_LOG_ID = 1365768783083339878
+from constants import LOG_CHANNEL_ID, WELCOME_CHANNEL_ID as CLAN_LEAVE_LOG_ID
 
 # ~~~~~ Fronta tagů, kterým je třeba udělat "úklid" ~~~~~
 _leave_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=0)   # neomezená
