@@ -1,5 +1,6 @@
 import discord
 import asyncio
+from datetime import datetime, timedelta
 
 from database import get_all_links, get_all_members
 from role_giver import update_roles
@@ -296,9 +297,19 @@ async def process_verification(bot, player_data, user, verification_channel, sel
             inline=False
         )
 
-        embed.set_footer(text="⚠️ Změnil jsi, ale nefunguje? Klid - aktualizace dat ze serveru Clash of Clans trvá ~5-6 minuty. Při další kontrole to bude cajk 😉")
+        embed.set_footer(text="⚠️ Změnil jsi, ale nefunguje? Klid - někdy trvá než se data aktualizují, v příští kontole to bude cajk. 😉")
 
         await verification_channel.send(embed=embed)
+
+        # Výpočet času příští kontroly (za 5 minut)
+        next_check_time = datetime.now() + timedelta(minutes=5)
+        timestamp = int(next_check_time.timestamp())
+
+        check_embed = discord.Embed(
+            description=f"⏳ **Další kontrola proběhne:** <t:{timestamp}:R>",
+            color=discord.Color.gold()
+        )
+        await verification_channel.send(embed=check_embed)
 
 
         print(f"✅ [Verification] Hráč {user} má nasadit: {chosen_item}")
@@ -310,7 +321,17 @@ async def process_verification(bot, player_data, user, verification_channel, sel
             await succesful_verification(bot, user, verification_channel, selected_item, player_data["name"], player_data["tag"])
             return "verified"
         else:
-            await verification_channel.send(f"⏳ Vybavení **{selected_item}** zatím není nasazeno. Další kontrola za 5 minuty...")
+            await verification_channel.send(f"⏳ Vybavení **{selected_item}** zatím není nasazeno.")
+
+            # Výpočet času příští kontroly (za 5 minut)
+            next_check_time = datetime.now() + timedelta(minutes=5)
+            timestamp = int(next_check_time.timestamp())
+
+            check_embed = discord.Embed(
+                description=f"⏳ **Další kontrola proběhne:** <t:{timestamp}:R>",
+                color=discord.Color.gold()
+            )
+            await verification_channel.send(embed=check_embed)
             print(f"⏳ [verification] Hráč {user} ještě nemá nasazené {selected_item}.")
             return None
 
