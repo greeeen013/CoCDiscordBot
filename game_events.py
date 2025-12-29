@@ -4,7 +4,7 @@ import json
 import os
 from api_handler import fetch_events_from_clash_ninja
 from datetime import datetime
-from constants import CLASH_OF_CLANS_EVENT_CHANNEL_ID, EVENT_EMOJIS
+from constants import CLASH_OF_CLANS_EVENT_CHANNEL_ID, EVENT_EMOJIS, LOG_CHANNEL_ID
 
 
 # === Cesta k JSONu ===
@@ -45,6 +45,8 @@ class GameEventsHandler:
         self.channel_id = CLASH_OF_CLANS_EVENT_CHANNEL_ID
         # 1) zkus načíst z JSON
         self.message_id = load_room_id("game_events_message")
+        # Sledujeme stav aktivity Raid Weekendu v runtime (None = po startu nevíme)
+        self._last_raid_active = None
 
     async def _ensure_message_id(self, channel: discord.TextChannel):
         """
@@ -121,6 +123,28 @@ class GameEventsHandler:
                 title = "Clan War League"
             if title == "CWL(Sign-up Until)":
                 title = "CWL (Přihlášky do..)"
+
+            # === NOVÉ: Detekce Clan Capital (Raid Weekend) ===
+            # Hledáme aktivní event "Raid Weekend" (nebo "Clan Capital")
+            # Pokud je aktivní a JSME SI JISTI že předtím nebyl (False -> True), pošleme zprávu.
+            # Ignorujeme přechod None -> True (což se stane po restartu bota, pokud raid už běží).
+            if title in ["Raid Weekend", "Clan Capital"]:
+                current_active = event["active"]
+                
+                # Notifikujeme pouze pokud byl dříve False a nyní je True
+                if current_active and self._last_raid_active is False:
+                    log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
+                    if log_channel:
+                        try:
+                            await log_channel.send("začal Clan Capital můžete ho zapnout")
+                            print("✅ [game_events] Odeslána notifikace o začátku Clan Capital.")
+                        except Exception as e:
+                            print(f"❌ [game_events] Chyba při odesílání notifikace do LOG kanálu: {e}")
+                    else:
+                        print("⚠️ [game_events] LOG_CHANNEL_ID nenalezen.")
+                
+                # Aktualizujeme stav
+                self._last_raid_active = current_active
 
             emoji = EVENT_EMOJIS.get(event['title'], "🗓️")
             field_name = f"{emoji} {title}" if not event["active"] else f"🟢 {title} (Probíhá)"
