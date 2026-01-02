@@ -14,6 +14,8 @@ from api_handler import fetch_current_war, fetch_current_capital
 from clan_war import ClanWarHandler
 from clan_capital import ClanCapitalHandler
 from game_events import GameEventsHandler
+from clan_war_league import ClanWarLeagueHandler
+
 
 
 
@@ -78,6 +80,9 @@ async def hourly_clan_update(config: dict, bot):
 
     # Vytvoření handleru pro Clan Capital (vždy nová instance)
     clan_capital_handler = ClanCapitalHandler(bot, config)
+
+    # Vytvoření handleru pro CWL
+    clan_war_league_handler = ClanWarLeagueHandler(bot, config)
 
     # Hlavní smyčka
     while True:
@@ -157,59 +162,7 @@ async def hourly_clan_update(config: dict, bot):
                     pass  # žádná aktivní war
 
                 # --- CWL ---
-                cwl_active = room_storage.get("cwl_active", False)
-                current_round = room_storage.get("current_cwl_round", 0)
-
-                if cwl_active:
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"])
-                    if not group_data:
-                        print("[CWL] Data skupiny nedostupná, končím iteraci.")
-                        room_storage.set("cwl_active", False)
-
-                    rounds = group_data.get("rounds", [])
-                    if current_round >= len(rounds):
-                        # Bezpečnostní reset pokud jsme mimo rozsah
-                        print("[CWL] current_cwl_round >= počet kol, resetuji.")
-                        room_storage.set("cwl_active", False)
-                        room_storage.set("current_cwl_round", 0)
-
-                    war_tags = rounds[current_round].get("warTags", [])
-                    active_found, ended_found = False, False
-
-                    for tag in war_tags:
-                        if tag == "#0":  # budoucí kolo
-                            continue
-                        war = await api_handler.fetch_league_war(tag)
-                        if not war:
-                            continue
-
-                        if war["clan"]["tag"] == config["CLAN_TAG"] or war["opponent"]["tag"] == config["CLAN_TAG"]:
-                            await clan_war_handler.process_war_data(war, attacks_per_member=1)
-                            state = war.get("state")
-                            print(f"[CWL] round {current_round + 1} – state: {state}")
-                            if state in ("preparation", "inWar"):
-                                active_found = True
-                                break
-                            elif state == "warEnded":
-                                ended_found = True
-
-                    if ended_found and not active_found:
-                        new_round = current_round + 1
-                        if new_round >= len(rounds):
-                            print("[CWL] Dokončena všechna kola – vypínám CWL.")
-                            room_storage.set("cwl_active", False)
-                            room_storage.set("current_cwl_round", 0)
-                        else:
-                            print(f"[CWL] Přechod na další kolo: {new_round + 1}")
-                            room_storage.set("current_cwl_round", new_round)
-
-                else:
-                    # Zkontroluj, zda začíná nová CWL sezóna
-                    group_data = await api_handler.fetch_league_group(config["CLAN_TAG"], config)
-                    if group_data and group_data.get("state") in ("preparation", "inWar"):
-                        print("[CWL] Detekován nový CWL, aktivuji.")
-                        room_storage.set("cwl_active", True)
-                        room_storage.set("current_cwl_round", 0)
+                await clan_war_league_handler.handle_cwl_status(clan_war_handler)
 
             except Exception as e:
                 print(f"[SCHEDULER] Chyba v CWL/war sekci: {e}")
