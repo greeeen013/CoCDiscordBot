@@ -8,6 +8,7 @@ import asyncio # Import knihovny asyncio pro asynchronní programování (např.
 from scheduler import hourly_clan_update # Import funkce pro hodinovou aktualizaci členů klanu
 from bot_commands import VerifikacniView, ConfirmView # Import funkcí a tříd pro nastavení příkazů a ověřovacího pohledu
 from mod_commands import setup_mod_commands # Import funkcí pro nastavení moderátorských příkazů
+from database import fetch_pending_warnings, WarningReviewView
 from constants import TOWN_HALL_EMOJIS, LEAGUE_EMOJIS, LOG_CHANNEL_ID
 
 VERIFICATION_PATH = "verification_data.json" # Definování konstanty s cestou k souboru, kde se ukládá info o zprávě pro verifikaci
@@ -49,6 +50,23 @@ class MyBot(commands.Bot):
             print(f"🏠 [sync] Serverově synchronizováno {len(guild_commands)} příkaz(ů)")
         except Exception as e:
             print(f"❌ [sync] Chyba guild sync: {e}")
+
+        # Obnovení persistentních views pro varování
+        try:
+            pending_warnings = fetch_pending_warnings()
+            for pw in pending_warnings:
+                view = WarningReviewView(
+                    coc_tag=pw['coc_tag'],
+                    coc_name=pw['coc_name'],
+                    date_time=pw['date_time'],
+                    reason=pw['reason']
+                )
+                self.add_view(view, message_id=pw['message_id'])
+            
+            if pending_warnings:
+                print(f"🔄 [setup_hook] Obnoveno {len(pending_warnings)} čekajících návrhů varování.")
+        except Exception as e:
+            print(f"❌ [setup_hook] Chyba při obnově varování: {e}")
 
     async def on_ready(self):
         print(f"✅🤖 Přihlášen jako {self.user}")
