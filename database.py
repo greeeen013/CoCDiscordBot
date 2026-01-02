@@ -62,6 +62,16 @@ def create_database():
                     notified_at TEXT
                 )
             ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS pending_warning_proposals (
+                    message_id INTEGER PRIMARY KEY,
+                    channel_id INTEGER,
+                    coc_tag TEXT,
+                    coc_name TEXT,
+                    date_time TEXT,
+                    reason TEXT
+                )
+            ''')
             conn.commit()
             print("✅ [database] Databáze a tabulky vytvořeny.")
     except Exception as e:
@@ -325,6 +335,41 @@ async def cleanup_old_warnings():
     except Exception as e:
         print(f"❌ [cleanup] Chyba při čištění varování: {e}")
 
+# === Funkce pro správu čekajících návrhů varování ===
+def save_pending_warning(message_id, channel_id, coc_tag, coc_name, date_time, reason):
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("""
+                INSERT OR REPLACE INTO pending_warning_proposals (message_id, channel_id, coc_tag, coc_name, date_time, reason)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (message_id, channel_id, coc_tag, coc_name, date_time, reason))
+            conn.commit()
+            print(f"💾 [database] Uložen návrh varování: {message_id} - {coc_tag}")
+    except Exception as e:
+        print(f"❌ [database] Chyba při ukládání návrhu varování: {e}")
+
+def delete_pending_warning(message_id):
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            c = conn.cursor()
+            c.execute("DELETE FROM pending_warning_proposals WHERE message_id = ?", (message_id,))
+            conn.commit()
+            print(f"🗑️ [database] Odstraněn návrh varování: {message_id}")
+    except Exception as e:
+        print(f"❌ [database] Chyba při mazání návrhu varování: {e}")
+
+def fetch_pending_warnings():
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute("SELECT * FROM pending_warning_proposals")
+            return [dict(row) for row in c.fetchall()]
+    except Exception as e:
+        print(f"❌ [database] Chyba při načítání návrhů varování: {e}")
+        return []
+
 # === Poslání varování jako zprávu na Discord ===
 class WarningReviewView(View):
     def __init__(self, coc_tag: str, coc_name: str, date_time: str, reason: str):
@@ -353,6 +398,9 @@ class WarningReviewView(View):
                     VALUES (?, ?, ?, NULL)
                 """, (self.coc_tag, self.date_time, self.reason))
                 conn.commit()
+
+            # Odstranění z pending
+            delete_pending_warning(interaction.message.id)
 
             await interaction.message.delete()
 
@@ -405,6 +453,9 @@ class WarningReviewView(View):
 
     @discord.ui.button(label="❌ Zrušit", style=discord.ButtonStyle.red)
     async def reject(self, interaction: discord.Interaction, button: Button):
+        # Odstranění z pending
+        delete_pending_warning(interaction.message.id)
+        
         await interaction.message.delete()
 
         # Sestav základní zprávu
@@ -498,7 +549,8 @@ async def notify_single_warning(bot: discord.Client, coc_tag: str, date_time: st
         if channel:
             msg = f"{coc_tag}\n@{name}\n{date_time}\n{reason}"
             view = WarningReviewView(coc_tag, name, date_time, reason)
-            await channel.send(msg, view=view)
+            sent_msg = await channel.send(msg, view=view)
+            save_pending_warning(sent_msg.id, sent_msg.channel.id, coc_tag, name, date_time, reason)
             print(f"📣 [notify] Návrh na varování odeslán pro {coc_tag}.")
     except Exception as e:
         print(f"❌ [notify] Chyba při posílání jednoho varování: {e}")
