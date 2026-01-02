@@ -268,6 +268,25 @@ class ClanWarHandler:
             print("❌ [clan_war] Žádná data o válce ke zpracování")
             return
 
+        # --- Detekce nové války podle startTime ---
+        current_start_time = war_data.get('startTime')
+        stored_start_time = room_storage.get("current_war_start_time")
+
+        if current_start_time and current_start_time != stored_start_time:
+            print(f"🆕 [clan_war] Detekován nový čas začátku války: {current_start_time} (původní: {stored_start_time}). Resetuji ID zprávy.")
+            
+            # Reset ID zprávy, aby se poslala nová
+            self.current_war_message_id = None
+            room_storage.set("war_status_message", None)
+            
+            # Uložení nového času začátku
+            room_storage.set("current_war_start_time", current_start_time)
+
+            # Reset pomocných proměnných pro novou válku
+            self.last_processed_order = 0
+            reset_war_reminder_flags(self)
+        # --- Konec detekce ---
+
         # --- Kontrola, zda je náš tag v opponent a pokud ano prohodíme je ---
         our_clan_tag = self.config["CLAN_TAG"].upper()
         if war_data.get('opponent', {}).get('tag', '').upper() == our_clan_tag:
