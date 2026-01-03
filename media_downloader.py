@@ -8,7 +8,8 @@ SUPPORTED_DOMAINS = [
     "youtube.com",
     "youtu.be",
     "tiktok.com",
-    "threads.net"
+    "threads.net",
+    "threads.com"
 ]
 
 def extract_url(message_content: str) -> str | None:
@@ -30,6 +31,10 @@ def download_media(url: str):
     Downloads media from the URL.
     Returns a dictionary with metadata and file path, or error.
     """
+    # Fix threads.com -> threads.net (yt-dlp only supports .net)
+    if "threads.com" in url:
+        url = url.replace("threads.com", "threads.net")
+
     # Configure yt-dlp
     ydl_opts = {
         'outtmpl': 'temp_downloads/%(id)s.%(ext)s',
