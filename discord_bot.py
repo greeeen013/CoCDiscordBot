@@ -89,8 +89,8 @@ class MyBot(commands.Bot):
         self.add_view(VerifikacniView())
 
         asyncio.create_task(hourly_clan_update(self.config, self))
-        asyncio.create_task(web_server.start_server()) # Spuštění web serveru pro stahování
-        print("✅ [bot] Inicializační rutiny spuštěny (View + scheduler + webserver).")
+        # Web server se nyní spouští automaticky (on-demand) při přidání souboru
+        print("✅ [bot] Inicializační rutiny spuštěny (View + scheduler).")
 
     async def on_message(self, message):
         if message.author.bot:
@@ -186,7 +186,7 @@ class MyBot(commands.Bot):
 
         if result['filesize_mb'] > SAFE_LIMIT_MB:
             # Soubor je příliš velký -> web server
-            key = web_server.add_file(result['filename'])
+            key = await web_server.add_file(result['filename'])
             download_url = f"https://discordvids.420013.xyz/videa-z-discordu/{key}"
             
             embed.add_field(name="Odkaz ke stažení", value=f"[Klikni pro stažení]({download_url})", inline=False)
