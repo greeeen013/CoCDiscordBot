@@ -8,7 +8,7 @@ SUPPORTED_DOMAINS = [
     "youtube.com",
     "youtu.be",
     "tiktok.com",
-    "threads.com"
+    "threads.net"
 ]
 
 def extract_url(message_content: str) -> str | None:
