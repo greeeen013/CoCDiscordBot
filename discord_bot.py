@@ -192,11 +192,7 @@ class MyBot(commands.Bot):
         if result['filesize_mb'] > SAFE_LIMIT_MB:
             # Soubor je příliš velký -> web server
             key = web_server.add_file(result['filename'])
-            # Předpokládáme localhost:8080, uživatel si pořeší tunel
-            # Uživatel chtěl odkaz ve stylu mojedomena.com/videa-z-discordu/KIC
-            # Zde pošleme lokální, který si pak on namapuje, nebo relativní
-            
-            download_url = f"http://localhost:{web_server.PORT}/videa-z-discordu/{key}"
+            download_url = f"https://discordvids.420013.xyz/videa-z-discordu/{key}"
             
             embed.add_field(name="Odkaz ke stažení", value=f"[Klikni pro stažení]({download_url})", inline=False)
             embed.set_footer(text="⚠️ Soubor je příliš velký pro Discord. Odkaz je platný 24h.")
