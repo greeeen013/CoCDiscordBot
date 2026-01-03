@@ -87,12 +87,7 @@ class MyBot(commands.Bot):
 
         self._initialized = True
         self.add_view(VerifikacniView())
-        if getattr(self, "_initialized", False):
-            print("⚠️ [bot] Opětovné připojení zjištěno — inicializační rutiny přeskočeny.")
-            return
 
-        self._initialized = True
-        self.add_view(VerifikacniView())
         asyncio.create_task(hourly_clan_update(self.config, self))
         asyncio.create_task(web_server.start_server()) # Spuštění web serveru pro stahování
         print("✅ [bot] Inicializační rutiny spuštěny (View + scheduler + webserver).")
