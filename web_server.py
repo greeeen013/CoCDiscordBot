@@ -143,19 +143,24 @@ async def start_server():
     """
     Starts the web server.
     """
+    print(f"⏳ [WebServer] Pokouším se spustit web server na portu {PORT}...")
+    
     # Ensure temp directory exists
     if not os.path.exists(TEMP_DIR):
         os.makedirs(TEMP_DIR)
     
     # Clean up ANY leftover files in temp dir on startup
-    # (Assuming we want a clean state on restart as per user request "pokud se vyresetuje tak ten soubor to smaze")
-    for f in os.listdir(TEMP_DIR):
-        full_path = os.path.join(TEMP_DIR, f)
-        try:
+    try:
+        count = 0
+        for f in os.listdir(TEMP_DIR):
+            full_path = os.path.join(TEMP_DIR, f)
             if os.path.isfile(full_path):
                 os.remove(full_path)
-        except Exception as e:
-            print(f"❌ Chyba při čištění temp složky: {e}")
+                count += 1
+        if count > 0:
+            print(f"🧹 [WebServer] Vyčištěno {count} dočasných souborů.")
+    except Exception as e:
+        print(f"❌ [WebServer] Chyba při čištění temp složky: {e}")
 
     app = web.Application()
     app.router.add_get('/videa-z-discordu/{key}', handle_download_page)
@@ -164,10 +169,15 @@ async def start_server():
     
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', PORT)
-    await site.start()
     
-    print(f"🌍 Web server běží na portu {PORT}")
+    try:
+        site = web.TCPSite(runner, '0.0.0.0', PORT)
+        await site.start()
+        print(f"🌍 [WebServer] Web server ÚSPĚŠNĚ BĚŽÍ na portu {PORT} (http://0.0.0.0:{PORT})")
+    except Exception as e:
+        print(f"❌ [WebServer] KRITICKÁ CHYBA: Nepodařilo se spustit server na portu {PORT}!")
+        print(f"❌ [WebServer] Detail chyby: {e}")
+        return
     
     # Start cleanup task
     asyncio.create_task(cleanup_task())
