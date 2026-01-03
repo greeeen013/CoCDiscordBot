@@ -10,6 +10,8 @@ from bot_commands import VerifikacniView, ConfirmView # Import funkcí a tříd 
 from mod_commands import setup_mod_commands # Import funkcí pro nastavení moderátorských příkazů
 from database import fetch_pending_warnings, WarningReviewView
 from constants import TOWN_HALL_EMOJIS, LEAGUE_EMOJIS, LOG_CHANNEL_ID
+import media_downloader
+import web_server
 
 VERIFICATION_PATH = "verification_data.json" # Definování konstanty s cestou k souboru, kde se ukládá info o zprávě pro verifikaci
 
@@ -85,11 +87,28 @@ class MyBot(commands.Bot):
 
         self._initialized = True
         self.add_view(VerifikacniView())
+        if getattr(self, "_initialized", False):
+            print("⚠️ [bot] Opětovné připojení zjištěno — inicializační rutiny přeskočeny.")
+            return
+
+        self._initialized = True
+        self.add_view(VerifikacniView())
         asyncio.create_task(hourly_clan_update(self.config, self))
-        print("✅ [bot] Inicializační rutiny spuštěny (View + scheduler).")
+        asyncio.create_task(web_server.start_server()) # Spuštění web serveru pro stahování
+        print("✅ [bot] Inicializační rutiny spuštěny (View + scheduler + webserver).")
 
     async def on_message(self, message):
-        if message.author.bot or not message.guild:
+        if message.author.bot:
+            return
+
+        # Detekce DM (Private Channel)
+        if not message.guild:
+            url = media_downloader.extract_url(message.content)
+            if url:
+                await self.handle_media_download(message, url)
+            return
+
+        if not message.guild:
             return
 
         now = time.time()
@@ -146,6 +165,60 @@ class MyBot(commands.Bot):
         view.message = msg
         await asyncio.sleep(30)
         await msg.delete()
+
+    async def handle_media_download(self, message, url):
+        status_msg = await message.channel.send("Zahajuji stahování... ⏳")
+        
+        loop = asyncio.get_running_loop()
+        # Spustíme blokující stahování v exekutoru
+        result = await loop.run_in_executor(None, media_downloader.download_media, url)
+        
+        if "error" in result:
+            await status_msg.edit(content=f"❌ Chyba při stahování: {result['error']}")
+            return
+            
+        # Zkontrolujeme velikost (Discord limit cca 10MB pro free, více pro Nitro/Boost)
+        SAFE_LIMIT_MB = 10
+        
+        embed = discord.Embed(title="Stažení dokončeno", color=discord.Color.blue())
+        embed.add_field(name="Název", value=result['title'], inline=False)
+        embed.add_field(name="Autor", value=result['uploader'], inline=True)
+        if result['duration']:
+            minutes, seconds = divmod(result['duration'], 60)
+            embed.add_field(name="Délka", value=f"{int(minutes)}:{int(seconds):02d}", inline=True)
+        embed.add_field(name="Rozlišení", value=result['resolution'], inline=True)
+        embed.add_field(name="Velikost", value=f"{result['filesize_mb']} MB", inline=True)
+
+        if result['filesize_mb'] > SAFE_LIMIT_MB:
+            # Soubor je příliš velký -> web server
+            key = web_server.add_file(result['filename'])
+            # Předpokládáme localhost:8080, uživatel si pořeší tunel
+            # Uživatel chtěl odkaz ve stylu mojedomena.com/videa-z-discordu/KIC
+            # Zde pošleme lokální, který si pak on namapuje, nebo relativní
+            
+            download_url = f"http://localhost:{web_server.PORT}/videa-z-discordu/{key}"
+            
+            embed.add_field(name="Odkaz ke stažení", value=f"[Klikni pro stažení]({download_url})", inline=False)
+            embed.set_footer(text="⚠️ Soubor je příliš velký pro Discord. Odkaz je platný 24h.")
+            
+            try:
+                await status_msg.delete()
+                await message.channel.send(embed=embed)
+            except Exception as e:
+                await message.channel.send(f"❌ Chyba při odesílání odkazu: {e}")
+            # NEMAZAT soubor, web server ho potřebuje
+            
+        else:
+            # Soubor je malý -> poslat přímo
+            file = discord.File(result['filename'])
+            try:
+                await status_msg.delete()
+                await message.channel.send(embed=embed, file=file)
+            except Exception as e:
+                await message.channel.send(f"❌ Chyba při odesílání souboru: {e}")
+            finally:
+                media_downloader.delete_file(result['filename'])
+
 
 def start_bot(config): # Funkce pro spuštění bota
     intents = discord.Intents.default() # Vytvoříme defaultní intents
