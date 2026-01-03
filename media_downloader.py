@@ -31,10 +31,19 @@ def download_media(url: str):
     Downloads media from the URL.
     Returns a dictionary with metadata and file path, or error.
     """
-    # Fix threads.com -> threads.net (yt-dlp only supports .net)
-    if "threads.com" in url:
-        url = url.replace("threads.com", "threads.net")
-
+    
+    # Threads Fix: Convert threads.net/com link to instagram.com/p/ID link
+    # yt-dlp might handle Instagram better than Threads directly in some versions
+    if "threads.net" in url or "threads.com" in url:
+        import re
+        # Find ID after /post/
+        match = re.search(r'/post/([^/?#&]+)', url)
+        if match:
+            post_id = match.group(1)
+            # Reconstruct as Instagram URL
+            url = f"https://www.instagram.com/p/{post_id}/"
+            print(f"🔄 [MediaDownloader] Konvertuji Threads odkaz na Instagram: {url}")
+            
     # Configure yt-dlp
     ydl_opts = {
         'outtmpl': 'temp_downloads/%(id)s.%(ext)s',
