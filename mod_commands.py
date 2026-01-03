@@ -483,41 +483,64 @@ async def setup_mod_commands(bot):
         our_tag = bot.config["CLAN_TAG"].upper()
 
         # --- 1) Stáhni CWL i běžnou CW a vyber to, co opravdu probíhá ---
+        # --- 1) Stáhni CWL i běžnou CW a vyber to, co opravdu probíhá ---
         selected_war = None
         selected_is_cwl = False
 
-        # CWL?
-        cwl_active = room_storage.get("cwl_active")
-        cwl_data = None
-        if cwl_active:
-            war_tag = room_storage.get("current_war_tag")
-            if war_tag and war_tag != "#0":
-                war_tag_clean = war_tag.replace('#', '')
-                cwl_data = await api_handler.fetch_league_war(war_tag_clean, bot.config)
-                if cwl_data:
-                    c_tag = cwl_data.get('clan', {}).get('tag', '').upper()
-                    o_tag = cwl_data.get('opponent', {}).get('tag', '').upper()
-                    if our_tag not in (c_tag, o_tag):
-                        cwl_data = None
+        # a) Zkusíme najít CWL válku (aktivní vyhledání)
+        cwl_candidate = None
+        group = await api_handler.fetch_league_group(our_tag, bot.config)
+        
+        if group and group.get('state') != 'notInWar':
+            # Zkusíme dohledat válku v aktuálním kole (podle uloženého indexu, default 0)
+            round_idx = room_storage.get("current_cwl_round")
+            if round_idx is None:
+                round_idx = 0
+            
+            rounds = group.get("rounds", [])
+            if 0 <= round_idx < len(rounds):
+                war_tags = rounds[round_idx].get("warTags", [])
+                for tag in war_tags:
+                    if tag == "#0":
+                        continue
+                        
+                    w = await api_handler.fetch_league_war(tag, bot.config)
+                    if w:
+                        c_tag = w.get('clan', {}).get('tag', '').upper()
+                        o_tag = w.get('opponent', {}).get('tag', '').upper()
+                        if our_tag == c_tag or our_tag == o_tag:
+                            cwl_candidate = w
+                            break
 
-        # Normální CW
-        cw_data = await fetch_current_war(bot.clan_tag, bot.config)
+        # b) Zkusíme najít klasickou CW
+        cw_candidate = await fetch_current_war(bot.clan_tag, bot.config)
 
-        def state_priority(d):
-            s = (d or {}).get("state")
-            return {"inWar": 2, "preparation": 1}.get(s, 0)
+        # c) Vyhodnocení priority: Active CWL > Active CW > Ended CWL > Ended CW
+        def get_war_score(w):
+            if not w: return 0
+            s = w.get("state")
+            if s in ("inWar", "preparation"): return 2
+            if s == "warEnded": return 1
+            return 0
 
-        candidates = []
-        if cwl_data: candidates.append(("cwl", cwl_data))
-        if cw_data:  candidates.append(("cw", cw_data))
+        score_cwl = get_war_score(cwl_candidate)
+        score_cw = get_war_score(cw_candidate)
 
-        if candidates:
-            # Preferuj vyšší prioritu stavu; při shodě preferuj CW před CWL
-            candidates.sort(key=lambda x: (state_priority(x[1]), 1 if x[0] == "cwl" else 2), reverse=True)
-            selected_is_cwl, selected_war = (candidates[0][0] == "cwl"), candidates[0][1]
+        if score_cwl >= 2:
+            selected_war = cwl_candidate
+            selected_is_cwl = True
+        elif score_cw >= 2:
+            selected_war = cw_candidate
+            selected_is_cwl = False
+        elif score_cwl >= 1:
+            selected_war = cwl_candidate
+            selected_is_cwl = True
+        elif score_cw >= 1:
+            selected_war = cw_candidate
+            selected_is_cwl = False
 
         if not selected_war or selected_war.get("state") is None:
-            await send_ephemeral(interaction, "❌ Nepodařilo se získat data o aktuální klanové válce.")
+            await send_ephemeral(interaction, "❌ Nepodařilo se získat data o žádné běžící ani nedávné válce (CWL/Klasická).")
             return
 
         war_data = dict(selected_war)  # kopie
