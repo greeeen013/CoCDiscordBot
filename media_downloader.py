@@ -6,7 +6,9 @@ import re
 SUPPORTED_DOMAINS = [
     "instagram.com",
     "youtube.com",
-    "youtu.be"
+    "youtu.be",
+    "tiktok.com",
+    "threads.com"
 ]
 
 def extract_url(message_content: str) -> str | None:
