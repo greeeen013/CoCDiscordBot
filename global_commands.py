@@ -243,9 +243,11 @@ class GlobalCommands(commands.Cog):
         else:
             await interaction.followup.send(f"Výsledek: **{num}**", ephemeral=True)
 
-    # ========== /url (to mp4) ==========
-    @app_commands.command(
-        name="url to mp4",
+    # ========== /url Group ==========
+    url_group = app_commands.Group(name="url", description="Nástroje pro URL (stahování atd.)")
+
+    @url_group.command(
+        name="mp4",
         description="Stáhne video z URL a pošle ho jako MP4 (s možností statistik)."
     )
     @app_commands.allowed_installs(guilds=True, users=True)
