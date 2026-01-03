@@ -53,6 +53,11 @@ def download_media(url: str):
         'noplaylist': True,
         # 'restrictfilenames': True, 
     }
+    
+    # Check for cookies.txt
+    if os.path.exists("cookies.txt"):
+        ydl_opts['cookiefile'] = "cookies.txt"
+        print("🍪 [MediaDownloader] Používám cookies.txt")
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
