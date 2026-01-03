@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os
 
-from database import create_database, database_exists
+from database import initialize_db, database_exists
 from discord_bot import start_bot
 
 
@@ -20,8 +20,8 @@ def load_config():
         exit(1)
 
 def main():
-    if not database_exists():
-        create_database()
+    # Vždy ověříme/aktualizujeme strukturu databáze
+    initialize_db()
 
 
     config = load_config()

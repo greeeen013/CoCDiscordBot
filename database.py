@@ -25,9 +25,9 @@ def database_exists() -> bool:
     """Zkontroluje, zda existuje soubor databáze."""
     return os.path.exists(DB_PATH)
 
-# === Funkce pro vytvoření nové databáze ===
-def create_database():
-    """Vytvoří novou SQLite databázi s tabulkami clan_members, coc_links a clan_warnings."""
+# === Funkce pro vytvoření/aktualizaci struktury databáze ===
+def initialize_db():
+    """Vytvoří nebo aktualizuje tabulky v databázi (clan_members, coc_links, clan_warnings, pending_warning_proposals)."""
     try:
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
@@ -73,9 +73,9 @@ def create_database():
                 )
             ''')
             conn.commit()
-            print("✅ [database] Databáze a tabulky vytvořeny.")
+            # print("✅ [database] Struktura databáze ověřena.") 
     except Exception as e:
-        print(f"❌ [database] Chyba při vytváření databáze: {e}")
+        print(f"❌ [database] Chyba při inicializaci databáze: {e}")
 
 # === Uloží nebo aktualizuje hráče ===
 def update_or_create_members(data: list[dict], bot=None):
@@ -185,17 +185,15 @@ def update_or_create_members(data: list[dict], bot=None):
 def process_clan_data(data: list[dict], bot=None):
     """
     Univerzální funkce pro zpracování dat z API:
-    - Zkontroluje, zda existuje databáze
-    - Pokud ne, vytvoří ji
+    - Zajistí, že databáze a tabulky existují (migrace)
     - Pak provede aktualizace nebo zápis hráčů
     """
     if not isinstance(data, list):
         print("❌ [database] Data nejsou ve správném formátu: očekáván seznam hráčů.")
         return
 
-    if not database_exists():
-        print("📁 Databáze neexistuje, bude vytvořena...")
-        create_database()
+    # Vždy ověříme strukturu (pro případ nových tabulek)
+    initialize_db()
 
     update_or_create_members(data, bot=bot)
 
