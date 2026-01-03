@@ -201,11 +201,13 @@ class GlobalCommands(commands.Cog):
     @app_commands.describe(
         min="Dolní mez (výchozí 1)",
         max="Horní mez (výchozí 6)",
-        mince="Zapnout hod mincí místo čísla"
+        mince="Zapnout hod mincí místo čísla",
+        zverejnit="Zda výsledek ukázat všem (defaultně skryté)"
     )
-    async def random_cmd(self, interaction: Interaction, min: int = 1, max: int = 6, mince: bool = False):
-        # ✅ Odpovídáme vždy ephemerálně (jen uživatel to uvidí)
-        await interaction.response.defer(ephemeral=True, thinking=True)
+    async def random_cmd(self, interaction: Interaction, min: int = 1, max: int = 6, mince: bool = False, zverejnit: bool = False):
+        # Rozhodneme, zda bude odpověď viditelná všem
+        ephemeral = not zverejnit
+        await interaction.response.defer(ephemeral=ephemeral, thinking=True)
 
         user = interaction.user
 
@@ -214,6 +216,13 @@ class GlobalCommands(commands.Cog):
         tier = tier_from_member(member)
 
         if tier not in {"leader", "co_leader", "elder", "verified"}:
+            # Pokud uživatel chtěl public, ale nemůže, smažeme deferred public msg a pošleme chybu soukromě
+            if not ephemeral:
+                await interaction.delete_original_response()
+                return await interaction.followup.send(
+                    "⛔ Tento příkaz je dostupný až po **ověření** na našem serveru.",
+                    ephemeral=True
+                )
             return await interaction.followup.send(
                 "⛔ Tento příkaz je dostupný až po **ověření** na našem serveru.",
                 ephemeral=True
@@ -222,16 +231,28 @@ class GlobalCommands(commands.Cog):
         import random
         if mince:
             result = random.choice(["Panna", "Orel"])
-            return await interaction.followup.send(f"Výsledek: **{result}**", ephemeral=True)
+            msg = f"Výsledek: **{result}**"
+            if zverejnit:
+                msg = f"🪙 Hod mincí: **{result}**"
+            return await interaction.followup.send(msg, ephemeral=ephemeral)
 
         if min > max:
             min, max = max, min
         span = max - min
         if span > 10_000_000:
-            return await interaction.followup.send("⛔ Rozsah je příliš velký.", ephemeral=True)
+            err_msg = "⛔ Rozsah je příliš velký."
+            if not ephemeral:
+                 await interaction.delete_original_response()
+                 return await interaction.followup.send(err_msg, ephemeral=True)
+            return await interaction.followup.send(err_msg, ephemeral=True)
 
         num = random.randint(min, max)
-        await interaction.followup.send(f"Výsledek: **{num}**", ephemeral=True)
+
+        if zverejnit:
+            # Uživatel chtěl veřejný výsledek -> přidáme info o intervalu
+            await interaction.followup.send(f"🎲 Hod ({min}-{max}): **{num}**", ephemeral=False)
+        else:
+            await interaction.followup.send(f"Výsledek: **{num}**", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
