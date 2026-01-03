@@ -10,8 +10,12 @@ from constants import (
     ROLE_ELDER,
     ROLE_CO_LEADER,
     ROLE_LEADER,
+    ROLE_LEADER,
     ROLES_STAFF,
 )
+import media_downloader
+import web_server
+import time
 
 
 
@@ -93,6 +97,7 @@ class GlobalCommands(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.url_cooldowns = {}  # user_id -> timestamp (kdy končí cooldown)
 
     # ---------- interní: zjisti člena na domovském serveru ----------
     async def get_home_member(self, user_id: int) -> discord.Member | None:
@@ -202,37 +207,21 @@ class GlobalCommands(commands.Cog):
         min="Dolní mez (výchozí 1)",
         max="Horní mez (výchozí 6)",
         mince="Zapnout hod mincí místo čísla",
-        zverejnit="Zda výsledek ukázat všem (defaultně skryté)"
+        skryt="Zda výsledek skrýt (defaultně viditelné všem)"
     )
-    async def random_cmd(self, interaction: Interaction, min: int = 1, max: int = 6, mince: bool = False, zverejnit: bool = False):
+    async def random_cmd(self, interaction: Interaction, min: int = 1, max: int = 6, mince: bool = False, skryt: bool = False):
         # Rozhodneme, zda bude odpověď viditelná všem
-        ephemeral = not zverejnit
+        ephemeral = skryt
         await interaction.response.defer(ephemeral=ephemeral, thinking=True)
 
         user = interaction.user
 
-        # Ověření přes domovskou guildu / DB
-        member = await self.get_home_member(user.id)
-        tier = tier_from_member(member)
-
-        if tier not in {"leader", "co_leader", "elder", "verified"}:
-            # Pokud uživatel chtěl public, ale nemůže, smažeme deferred public msg a pošleme chybu soukromě
-            if not ephemeral:
-                await interaction.delete_original_response()
-                return await interaction.followup.send(
-                    "⛔ Tento příkaz je dostupný až po **ověření** na našem serveru.",
-                    ephemeral=True
-                )
-            return await interaction.followup.send(
-                "⛔ Tento příkaz je dostupný až po **ověření** na našem serveru.",
-                ephemeral=True
-            )
 
         import random
         if mince:
             result = random.choice(["Panna", "Orel"])
             msg = f"Výsledek: **{result}**"
-            if zverejnit:
+            if not skryt:
                 msg = f"🪙 Hod mincí: **{result}**"
             return await interaction.followup.send(msg, ephemeral=ephemeral)
 
@@ -248,11 +237,112 @@ class GlobalCommands(commands.Cog):
 
         num = random.randint(min, max)
 
-        if zverejnit:
+        if not skryt:
             # Uživatel chtěl veřejný výsledek -> přidáme info o intervalu
             await interaction.followup.send(f"🎲 Hod ({min}-{max}): **{num}**", ephemeral=False)
         else:
             await interaction.followup.send(f"Výsledek: **{num}**", ephemeral=True)
+
+    # ========== /url (to mp4) ==========
+    @app_commands.command(
+        name="url to mp4",
+        description="Stáhne video z URL a pošle ho jako MP4 (s možností statistik)."
+    )
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.describe(
+        url="Odkaz na video (TikTok, YouTube, Instagram...)",
+        statistika="Zobrazit statistiky videa? (Default: Vypnuto)",
+        skryt="Pokud zapnuto, video i statistiky uvidíš jen ty (Ephemeral).",
+    )
+    @app_commands.choices(statistika=[
+        app_commands.Choice(name="Vypnuto", value="off"),
+        app_commands.Choice(name="Zapnuto (Veřejné)", value="public"),
+        app_commands.Choice(name="Zapnuto (Jen pro mě)", value="private"),
+    ])
+    async def url_to_mp4(self, interaction: Interaction, url: str, statistika: str = "off", skryt: bool = False):
+        user_id = interaction.user.id
+        now = time.time()
+
+        # 1) Cooldown check (10 minut = 600 sekund)
+        if user_id in self.url_cooldowns:
+            expiry = self.url_cooldowns[user_id]
+            if now < expiry:
+                remaining = int(expiry - now)
+                m, s = divmod(remaining, 60)
+                await interaction.response.send_message(
+                    f"⏳ Musíš počkat ještě **{m}m {s}s** před dalším stažením.",
+                    ephemeral=True
+                )
+                return
+        
+        # Nastavíme cooldown
+        self.url_cooldowns[user_id] = now + 600
+
+        defer_ephemeral = skryt
+        await interaction.response.defer(ephemeral=defer_ephemeral, thinking=True)
+
+        try:
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, media_downloader.download_media, url)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Chyba při spouštění stahování: {str(e)}", ephemeral=True)
+            return
+
+        if "error" in result:
+            await interaction.followup.send(f"❌ Chyba při stahování: {result['error']}", ephemeral=True)
+            return
+
+        # Embed se statistikami
+        embed = discord.Embed(title="Stažení dokončeno", color=discord.Color.blue())
+        embed.add_field(name="Název", value=result.get('title', '?'), inline=False)
+        embed.add_field(name="Autor", value=result.get('uploader', '?'), inline=True)
+        if result.get('duration'):
+            mins, secs = divmod(result['duration'], 60)
+            embed.add_field(name="Délka", value=f"{int(mins)}:{int(secs):02d}", inline=True)
+        embed.add_field(name="Rozlišení", value=result.get('resolution', '?'), inline=True)
+        embed.add_field(name="Velikost", value=f"{result.get('filesize_mb', 0)} MB", inline=True)
+        
+        SAFE_LIMIT_MB = 10
+        filesize = result.get('filesize_mb', 0)
+        filename = result['filename']
+        
+        try:
+            if filesize > SAFE_LIMIT_MB:
+                key = await web_server.add_file(filename)
+                download_url = f"https://discordvids.420013.xyz/videa-z-discordu/{key}"
+                
+                embed.add_field(name="Odkaz ke stažení", value=f"[Klikni pro stažení]({download_url})", inline=False)
+                embed.set_footer(text="⚠️ Soubor je příliš velký pro Discord. Odkaz je platný 24h.")
+                
+                # Pokud filesize > 10MB, nemůžeme poslat video.
+                # Vždy pošleme embed (je to jediný způsob jak doručit obsah).
+                # Pokud statistika=off, ten embed je trochu "ukecaný", ale je to nutné pro doručení odkazu.
+                
+                await interaction.followup.send(embed=embed, ephemeral=defer_ephemeral)
+                
+            else:
+                file = discord.File(filename)
+                
+                if skryt:
+                    # Vše ephemeral
+                    await interaction.followup.send(file=file, ephemeral=True)
+                    if statistika != "off":
+                         await interaction.followup.send(embed=embed, ephemeral=True)
+                else:
+                    # Video public
+                    await interaction.followup.send(file=file, ephemeral=False)
+                    
+                    if statistika == "public":
+                        await interaction.followup.send(embed=embed, ephemeral=False)
+                    elif statistika == "private":
+                        await interaction.followup.send(embed=embed, ephemeral=True)
+                        
+        except Exception as e:
+            await interaction.followup.send(f"❌ Chyba při odesílání: {e}", ephemeral=True)
+        finally:
+            if filesize <= SAFE_LIMIT_MB:
+                media_downloader.delete_file(filename)
 
 
 async def setup(bot: commands.Bot):
