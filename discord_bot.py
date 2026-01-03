@@ -204,7 +204,10 @@ class MyBot(commands.Bot):
             file = discord.File(result['filename'])
             try:
                 await status_msg.delete()
-                await message.channel.send(embed=embed, file=file)
+                # 1. zpráva: Samotné video
+                await message.channel.send(file=file)
+                # 2. zpráva: Statistiky (embed) pod tím
+                await message.channel.send(embed=embed)
             except Exception as e:
                 await message.channel.send(f"❌ Chyba při odesílání souboru: {e}")
             finally:
