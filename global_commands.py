@@ -1,5 +1,7 @@
 import asyncio
+import os
 import re
+import urllib.parse
 import discord
 from discord import app_commands, Interaction
 from discord.ext import commands
@@ -310,18 +312,35 @@ class GlobalCommands(commands.Cog):
         filename = result['filename']
         
         try:
+
             if filesize > SAFE_LIMIT_MB:
                 key = await web_server.add_file(filename)
-                download_url = f"https://discordvids.420013.xyz/videa-z-discordu/{key}"
                 
-                embed.add_field(name="Odkaz ke stažení", value=f"[Klikni pro stažení]({download_url})", inline=False)
+                # Construct URLs
+                safe_filename = urllib.parse.quote(os.path.basename(filename))
+                base_url = "https://discordvids.420013.xyz"
+                page_url = f"{base_url}/videa-z-discordu/{key}"
+                direct_url = f"{base_url}/download/{key}/{safe_filename}"
+                
+                embed.add_field(name="Odkaz ke stažení", value=f"[Zobrazit stránku ke stažení]({page_url})", inline=False)
                 embed.set_footer(text="⚠️ Soubor je příliš velký pro Discord. Odkaz je platný 24h.")
                 
-                # Pokud filesize > 10MB, nemůžeme poslat video.
-                # Vždy pošleme embed (je to jediný způsob jak doručit obsah).
-                # Pokud statistika=off, ten embed je trochu "ukecaný", ale je to nutné pro doručení odkazu.
-                
-                await interaction.followup.send(embed=embed, ephemeral=defer_ephemeral)
+                if skryt:
+                    # Everything ephemeral
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    await interaction.followup.send(content=f"**Přímý odkaz:**\n{direct_url}", ephemeral=True)
+                else:
+                    # Public Interaction:
+                    # 1. Send Stats Embed check (First, so link is under it)
+                    if statistika == "public":
+                        await interaction.followup.send(embed=embed, ephemeral=False)
+                    else:
+                        # "off" or "private" -> Ephemeral Stats
+                        # User wants to see stats even if default "off" for large files
+                        await interaction.followup.send(embed=embed, ephemeral=True)
+                    
+                    # 2. Send Public Direct Link
+                    await interaction.followup.send(content=direct_url, ephemeral=False)
                 
             else:
                 file = discord.File(filename)

@@ -247,6 +247,7 @@ async def start_server():
     app.router.add_get('/videa-z-discordu/{key}', handle_download_page)
     app.router.add_get('/videa-z-discordu/{key}/', handle_download_page) # redirect slash
     app.router.add_get('/download/{key}', handle_file_download)
+    app.router.add_get('/download/{key}/{filename}', handle_file_download) # enable direct link with extension for discord embed
     
     server_runner = web.AppRunner(app)
     await server_runner.setup()
