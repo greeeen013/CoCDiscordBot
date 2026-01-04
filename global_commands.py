@@ -385,10 +385,52 @@ class GlobalCommands(commands.Cog):
         filesize = result.get('filesize_mb', 0)
         filename = result['filename']
         
+        
+        # Helper for sending with token expiration fallback
+        async def robust_send(content=None, embed=None, file_path=None, ephemeral=False):
+            # Create file object if needed
+            file_obj = discord.File(file_path) if file_path else None
+            try:
+                await interaction.followup.send(content=content, embed=embed, file=file_obj, ephemeral=ephemeral)
+            except (discord.NotFound, discord.HTTPException) as e:
+                # 50027 = Invalid Webhook Token, 10062 = Unknown Interaction
+                # 404 = Not Found (webhook deleted or expired)
+                is_auth_error = isinstance(e, discord.HTTPException) and e.code == 50027
+                is_not_found = isinstance(e, discord.NotFound) or (isinstance(e, discord.HTTPException) and e.status == 404)
+                
+                if is_auth_error or is_not_found:
+                    # Token expired or interaction lost.
+                    # Recreate file object for fallback because previous attempt might have closed it
+                    if file_path:
+                        file_obj = discord.File(file_path)
+                    
+                    if ephemeral:
+                        # Fallback to DM
+                        try:
+                            await interaction.user.send(content=content, embed=embed, file=file_obj)
+                            # Only send warning text if we just sent something
+                            await interaction.user.send("⚠️ Interakce vypršela (limit 15 min), posílám výsledek do DM.")
+                        except Exception as dm_error:
+                            print(f"❌ Nepodařilo se poslat DM po vypršení tokenu: {dm_error}")
+                    else:
+                        # Fallback to Channel
+                        if interaction.channel:
+                             permission_check = interaction.channel.permissions_for(interaction.guild.me)
+                             if permission_check.send_messages:
+                                 await interaction.channel.send(content=content, embed=embed, file=file_obj)
+                             else:
+                                 print("❌ Nemám práva psát do kanálu po vypršení tokenu.")
+                else:
+                    # Re-raise other errors (like 413 Entity Too Large)
+                    raise e
+                    
         # Helper to force web upload
         async def do_web_host_flow():
             if progress_msg:
-                 await progress_msg.edit(content="⏳ **Nahrávám na webserver...**")
+                 try:
+                    await progress_msg.edit(content="⏳ **Nahrávám na webserver...**")
+                 except:
+                    pass
 
             key = await web_server.add_file(filename)
             safe_filename = urllib.parse.quote(os.path.basename(filename))
@@ -404,15 +446,15 @@ class GlobalCommands(commands.Cog):
                  embed.set_footer(text="⚠️ >Limit")
 
             if skryt:
-                await interaction.followup.send(embed=embed, ephemeral=True)
-                await interaction.followup.send(content=f"**Přímý odkaz:**\n{direct_url}", ephemeral=True)
+                await robust_send(embed=embed, ephemeral=True)
+                await robust_send(content=f"**Přímý odkaz:**\n{direct_url}", ephemeral=True)
             else:
                 embed_is_public = (statistika == "public")
                 if not embed_is_public:
-                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    await robust_send(embed=embed, ephemeral=True)
                 else:
-                    await interaction.followup.send(embed=embed, ephemeral=False)
-                await interaction.followup.send(content=direct_url, ephemeral=False)
+                    await robust_send(embed=embed, ephemeral=False)
+                await robust_send(content=direct_url, ephemeral=False)
 
         try:
             if filesize > SAFE_LIMIT_MB:
@@ -420,34 +462,44 @@ class GlobalCommands(commands.Cog):
             else:
                 # Update progress info for Uploading
                 if progress_msg:
-                    await progress_msg.edit(content="📤 **Nahrávám na Discord...** (to může chvíli trvat)")
-                
-                file = discord.File(filename)
+                    try:
+                        await progress_msg.edit(content="📤 **Nahrávám na Discord...** (to může chvíli trvat)")
+                    except:
+                        pass
                 
                 # --- Presentation Logic ---
                 if skryt:
-                     await interaction.followup.send(file=file, embed=embed, ephemeral=True)
+                     await robust_send(file_path=filename, embed=embed, ephemeral=True)
                 else:
                      if statistika == "off" and not original:
-                          await interaction.followup.send(file=file, ephemeral=False)
+                          await robust_send(file_path=filename, ephemeral=False)
                      elif statistika == "public" or original:
-                          await interaction.followup.send(file=file, embed=embed, ephemeral=False)
+                          await robust_send(file_path=filename, embed=embed, ephemeral=False)
                      elif statistika == "private":
-                          await interaction.followup.send(file=file, ephemeral=False)
-                          await interaction.followup.send(embed=embed, ephemeral=True)
+                          await robust_send(file_path=filename, ephemeral=False)
+                          await robust_send(embed=embed, ephemeral=True)
                      else:
-                          await interaction.followup.send(file=file, ephemeral=False)
+                          await robust_send(file_path=filename, ephemeral=False)
 
         except discord.HTTPException as e:
             if e.status == 413 or e.code == 40005:
                 # File too large fallback
                 if progress_msg:
-                    await progress_msg.edit(content="⚠️ Soubor je moc velký na Discord, nahrávám na web...")
+                    try:
+                        await progress_msg.edit(content="⚠️ Soubor je moc velký na Discord, nahrávám na web...")
+                    except:
+                        pass 
                 await do_web_host_flow()
             else:
-                await interaction.followup.send(f"❌ Chyba při odesílání na Discord: {e}", ephemeral=True)
+                try:
+                    await interaction.followup.send(f"❌ Chyba při odesílání na Discord: {e}", ephemeral=True)
+                except:
+                    print(f"❌ Chyba odesílání (token exp?): {e}")
         except Exception as e:
-            await interaction.followup.send(f"❌ Obecná chyba: {e}", ephemeral=True)
+            try:
+                await interaction.followup.send(f"❌ Obecná chyba: {e}", ephemeral=True)
+            except:
+                print(f"❌ Obecná chyba (token exp?): {e}")
         finally:
             if progress_msg:
                 try:
