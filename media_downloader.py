@@ -40,11 +40,16 @@ def download_media(url: str, progress_info: dict | None = None):
                  progress_info['total_bytes'] = d.get('total_bytes') or d.get('total_bytes_estimate')
                  
                  # Calculate percentage
-                 p = d.get('_percent_str', '0%').replace('%','')
-                 try:
-                     progress_info['percent'] = float(p)
-                 except:
-                     progress_info['percent'] = 0.0
+                 if progress_info['total_bytes'] and progress_info['downloaded_bytes']:
+                     progress_info['percent'] = (progress_info['downloaded_bytes'] / progress_info['total_bytes']) * 100
+                 else:
+                     p = d.get('_percent_str', '0%').replace('%','')
+                     # Remove ANSI codes if present
+                     p = re.sub(r'\x1b\[[0-9;]*m', '', p)
+                     try:
+                         progress_info['percent'] = float(p)
+                     except:
+                         progress_info['percent'] = 0.0
                  
                  progress_info['eta'] = d.get('eta', 0) # seconds
                  progress_info['speed'] = d.get('speed', 0) # bytes/s
