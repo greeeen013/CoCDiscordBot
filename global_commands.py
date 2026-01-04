@@ -99,7 +99,7 @@ class GlobalCommands(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.url_cooldowns = {}  # user_id -> timestamp (kdy končí cooldown)
+        self.url_cooldowns = {}  # user_id -> timestamp (kdy byl příkaz naposledy použit)
 
     # ---------- interní: zjisti člena na domovském serveru ----------
     async def get_home_member(self, user_id: int) -> discord.Member | None:
@@ -268,20 +268,35 @@ class GlobalCommands(commands.Cog):
         user_id = interaction.user.id
         now = time.time()
 
-        # 1) Cooldown check (10 minut = 600 sekund)
-        if user_id in self.url_cooldowns:
-            expiry = self.url_cooldowns[user_id]
-            if now < expiry:
-                remaining = int(expiry - now)
-                m, s = divmod(remaining, 60)
-                await interaction.response.send_message(
-                    f"⏳ Musíš počkat ještě **{m}m {s}s** před dalším stažením.",
-                    ephemeral=True
-                )
-                return
+        # 1) Zjistíme cooldown limit dle role
+        member = await self.get_home_member(user_id)
+        tier = tier_from_member(member)
         
-        # Nastavíme cooldown
-        self.url_cooldowns[user_id] = now + 600
+        # Leader: 0m, Co-Leader: 2m, Elder: 6m, Ostatní: 30m
+        if tier == "leader":
+            limit = 0
+        elif tier == "co_leader":
+            limit = 2 * 60
+        elif tier == "elder":
+            limit = 6 * 60
+        else:
+            limit = 30 * 60
+            
+        # 2) Check cooldown
+        # self.url_cooldowns nyní ukládá: user_id -> timestamp (kdy byl příkaz naposledy použit)
+        last_used = self.url_cooldowns.get(user_id, 0)
+        
+        if limit > 0 and (now - last_used) < limit:
+            remaining = int(limit - (now - last_used))
+            m, s = divmod(remaining, 60)
+            await interaction.response.send_message(
+                f"⏳ Musíš počkat ještě **{m}m {s}s** před dalším stažením.",
+                ephemeral=True
+            )
+            return
+
+        # Uložíme čas použití
+        self.url_cooldowns[user_id] = now
 
         defer_ephemeral = skryt
         await interaction.response.defer(ephemeral=defer_ephemeral, thinking=True)
