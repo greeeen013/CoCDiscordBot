@@ -245,12 +245,12 @@ class GlobalCommands(commands.Cog):
         else:
             await interaction.followup.send(f"Výsledek: **{num}**", ephemeral=True)
 
-    # ========== /url Group ==========
-    url_group = app_commands.Group(name="url", description="Nástroje pro URL (stahování atd.)")
+    # ========== /utility Group ==========
+    utility_group = app_commands.Group(name="utility", description="Užitečné nástroje (stahování atd.)")
 
-    @url_group.command(
-        name="mp4",
-        description="Stáhne video z URL a pošle ho jako MP4 (s možností statistik)."
+    @utility_group.command(
+        name="download",
+        description="Stáhne video z URL a pošle ho (s možností statistik)."
     )
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -258,13 +258,14 @@ class GlobalCommands(commands.Cog):
         url="Odkaz na video (TikTok, YouTube, Instagram...)",
         statistika="Zobrazit statistiky videa? (Default: Vypnuto)",
         skryt="Pokud zapnuto, video i statistiky uvidíš jen ty (Ephemeral).",
+        original="Přidat odkaz na originální video do embedu?"
     )
     @app_commands.choices(statistika=[
         app_commands.Choice(name="Vypnuto", value="off"),
         app_commands.Choice(name="Zapnuto (Veřejné)", value="public"),
         app_commands.Choice(name="Zapnuto (Jen pro mě)", value="private"),
     ])
-    async def url_to_mp4(self, interaction: Interaction, url: str, statistika: str = "off", skryt: bool = False):
+    async def download_cmd(self, interaction: Interaction, url: str, statistika: str = "off", skryt: bool = False, original: bool = False):
         user_id = interaction.user.id
         now = time.time()
 
@@ -272,7 +273,6 @@ class GlobalCommands(commands.Cog):
         member = await self.get_home_member(user_id)
         tier = tier_from_member(member)
         
-        # Leader: 0m, Co-Leader: 2m, Elder: 6m, Ostatní: 30m
         if tier == "leader":
             limit = 0
         elif tier == "co_leader":
@@ -283,7 +283,6 @@ class GlobalCommands(commands.Cog):
             limit = 30 * 60
             
         # 2) Check cooldown
-        # self.url_cooldowns nyní ukládá: user_id -> timestamp (kdy byl příkaz naposledy použit)
         last_used = self.url_cooldowns.get(user_id, 0)
         
         if limit > 0 and (now - last_used) < limit:
@@ -303,7 +302,42 @@ class GlobalCommands(commands.Cog):
 
         try:
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(None, media_downloader.download_media, url)
+            
+            # --- Progress Task ---
+            task = loop.run_in_executor(None, media_downloader.download_media, url)
+            start_time = time.time()
+            feedback_sent = False
+            
+            while not task.done():
+                try:
+                    # Check every 2 seconds to be responsive
+                    await asyncio.wait([task], timeout=2.0)
+                except Exception:
+                    # Should not raise exception
+                    pass
+                
+                # Check elapsed time
+                elapsed = time.time() - start_time
+                if not task.done():
+                     # If running longer than 20s and we haven't sent first feedback, or every 10s after
+                     should_send = False
+                     if elapsed > 20 and not feedback_sent:
+                         should_send = True
+                         feedback_sent = True
+                         next_feedback = elapsed + 10
+                     elif feedback_sent and elapsed > next_feedback:
+                         should_send = True
+                         next_feedback = elapsed + 10
+                         
+                     if should_send:
+                         await interaction.followup.send(
+                             f"⏳ Video se stále stahuje/zpracovává... (uplynulo {int(elapsed)}s)", 
+                             ephemeral=True
+                         )
+            
+            result = await task
+            # ---------------------
+
         except Exception as e:
             await interaction.followup.send(f"❌ Chyba při spouštění stahování: {str(e)}", ephemeral=True)
             return
@@ -312,15 +346,33 @@ class GlobalCommands(commands.Cog):
             await interaction.followup.send(f"❌ Chyba při stahování: {result['error']}", ephemeral=True)
             return
 
-        # Embed se statistikami
-        embed = discord.Embed(title="Stažení dokončeno", color=discord.Color.blue())
-        embed.add_field(name="Název", value=result.get('title', '?'), inline=False)
-        embed.add_field(name="Autor", value=result.get('uploader', '?'), inline=True)
-        if result.get('duration'):
-            mins, secs = divmod(result['duration'], 60)
-            embed.add_field(name="Délka", value=f"{int(mins)}:{int(secs):02d}", inline=True)
-        embed.add_field(name="Rozlišení", value=result.get('resolution', '?'), inline=True)
-        embed.add_field(name="Velikost", value=f"{result.get('filesize_mb', 0)} MB", inline=True)
+        # --- Embed Construction (New Style) ---
+        # "Name: ... \n Autor: ..." and optional "Original: ..."
+        # Color: Orange
+        
+        title_text = result.get('title', '?')
+        uploader_text = result.get('uploader', '?')
+        
+        description_text = f"Name: **{title_text}**\nAutor: **{uploader_text}**"
+        
+        if original:
+             description_text += f"\nOriginal: [Odkaz]({url})"
+        
+        embed = discord.Embed(description=description_text, color=discord.Color.orange())
+        embed.set_author(name="Media downloader", icon_url=self.bot.user.display_avatar.url)
+        
+        # Footer stats
+        # "1280x720 | 29:29 | 455.8 MB"
+        res = result.get('resolution', '?')
+        dur = result.get('duration', 0)
+        mins, secs = divmod(dur, 60)
+        dur_str = f"{int(mins)}:{int(secs):02d}"
+        size_mb = result.get('filesize_mb', 0)
+        
+        footer_text = f"{res} | {dur_str} | {size_mb} MB"
+        
+        embed.set_footer(text=footer_text)
+        
         
         SAFE_LIMIT_MB = 10
         filesize = result.get('filesize_mb', 0)
@@ -337,8 +389,9 @@ class GlobalCommands(commands.Cog):
                 page_url = f"{base_url}/videa-z-discordu/{key}"
                 direct_url = f"{base_url}/download/{key}/{safe_filename}"
                 
-                embed.add_field(name="Odkaz ke stažení", value=f"[Zobrazit stránku ke stažení]({page_url})", inline=False)
-                embed.set_footer(text="⚠️ Soubor je příliš velký pro Discord. Odkaz je platný 24h.")
+
+                embed.description += f"\n\n[Zobrazit stránku ke stažení]({page_url})"
+                embed.set_footer(text=f"{footer_text} | ⚠️ >10MB")
                 
                 if skryt:
                     # Everything ephemeral
@@ -347,12 +400,15 @@ class GlobalCommands(commands.Cog):
                 else:
                     # Public Interaction:
                     # 1. Send Stats Embed check (First, so link is under it)
+                    # DEFAULT (statistika="off") -> Ephemeral Embed (as per Request "defualtně ... uvidí jen člověk co to poslal")
+                    # If statistika="public" -> Public Embed
+                    # If statistika="private" -> Ephemeral Embed
+                    
+                    embed_ephemeral = True
                     if statistika == "public":
-                        await interaction.followup.send(embed=embed, ephemeral=False)
-                    else:
-                        # "off" or "private" -> Ephemeral Stats
-                        # User wants to see stats even if default "off" for large files
-                        await interaction.followup.send(embed=embed, ephemeral=True)
+                        embed_ephemeral = False
+                    
+                    await interaction.followup.send(embed=embed, ephemeral=embed_ephemeral)
                     
                     # 2. Send Public Direct Link
                     await interaction.followup.send(content=direct_url, ephemeral=False)
