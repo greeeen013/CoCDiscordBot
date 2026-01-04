@@ -24,11 +24,35 @@ def extract_url(message_content: str) -> str | None:
                 return url
     return None
 
-def download_media(url: str):
+def download_media(url: str, progress_info: dict | None = None):
     """
     Downloads media from the URL.
     Returns a dictionary with metadata and file path, or error.
+    Accepts an optional progress_info dict to update download status.
     """
+    
+    def progress_hook(d):
+        if progress_info is not None:
+             if d['status'] == 'downloading':
+                 progress_info['status'] = 'downloading'
+                 progress_info['filename'] = d.get('filename')
+                 progress_info['downloaded_bytes'] = d.get('downloaded_bytes')
+                 progress_info['total_bytes'] = d.get('total_bytes') or d.get('total_bytes_estimate')
+                 
+                 # Calculate percentage
+                 p = d.get('_percent_str', '0%').replace('%','')
+                 try:
+                     progress_info['percent'] = float(p)
+                 except:
+                     progress_info['percent'] = 0.0
+                 
+                 progress_info['eta'] = d.get('eta', 0) # seconds
+                 progress_info['speed'] = d.get('speed', 0) # bytes/s
+                 
+             elif d['status'] == 'finished':
+                 progress_info['status'] = 'processing'
+                 progress_info['percent'] = 100.0
+
     # Configure yt-dlp
     ydl_opts = {
         'outtmpl': 'temp_downloads/%(id)s.%(ext)s',
@@ -37,6 +61,7 @@ def download_media(url: str):
         'format': 'best[ext=mp4]/best', # Avoid merging if ffmpeg is missing
         'noplaylist': True,
         # 'restrictfilenames': True, 
+        'progress_hooks': [progress_hook],
     }
     
     # Check for cookies.txt

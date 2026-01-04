@@ -300,42 +300,62 @@ class GlobalCommands(commands.Cog):
         defer_ephemeral = skryt
         await interaction.response.defer(ephemeral=defer_ephemeral, thinking=True)
 
+        progress_info = {'status': 'starting', 'percent': 0, 'eta': None}
+        
         try:
             loop = asyncio.get_running_loop()
             
             # --- Progress Task ---
-            task = loop.run_in_executor(None, media_downloader.download_media, url)
+            # Pass progress_info to the downloader
+            task = loop.run_in_executor(None, media_downloader.download_media, url, progress_info)
             start_time = time.time()
-            feedback_sent = False
+            # Track the ONLY progress message we edit
+            progress_msg = None 
             
             while not task.done():
                 try:
-                    # Check every 2 seconds to be responsive
                     await asyncio.wait([task], timeout=2.0)
                 except Exception:
-                    # Should not raise exception
                     pass
                 
-                # Check elapsed time
+                # Logic: Every 10s (if taking >10s total), update or send progress message
                 elapsed = time.time() - start_time
-                if not task.done():
-                     # If running longer than 20s and we haven't sent first feedback, or every 10s after
-                     should_send = False
-                     if elapsed > 20 and not feedback_sent:
-                         should_send = True
-                         feedback_sent = True
-                         next_feedback = elapsed + 10
-                     elif feedback_sent and elapsed > next_feedback:
-                         should_send = True
-                         next_feedback = elapsed + 10
-                         
-                     if should_send:
-                         await interaction.followup.send(
-                             f"⏳ Video se stále stahuje/zpracovává... (uplynulo {int(elapsed)}s)", 
-                             ephemeral=True
-                         )
-            
+                if not task.done() and elapsed > 5:
+                    eta = progress_info.get('eta')
+                    percent = progress_info.get('percent', 0)
+                    status_text = "stahování..."
+                    
+                    if progress_info.get('status') == 'processing':
+                         status_text = "zpracování videa..."
+                         eta_str = "??"
+                    else:
+                         if eta:
+                             m, s = divmod(int(eta), 60)
+                             eta_str = f"{m}m {s}s"
+                         else:
+                             eta_str = "??"
+                    
+                    msg_content = f"⏳ **Stahování**: {percent:.1f}% | ETA: **{eta_str}** | {status_text}"
+                    
+                    # We only send/edit ephemeral message for USER feedback
+                    try:
+                        if progress_msg is None:
+                             # First time sending progress
+                             progress_msg = await interaction.followup.send(msg_content, ephemeral=True)
+                        else:
+                             # Edit existing
+                             await progress_msg.edit(content=msg_content)
+                    except Exception:
+                         pass
+
             result = await task
+            
+            # Cleanup progress message
+            if progress_msg:
+                try:
+                    await progress_msg.delete()
+                except:
+                    pass
             # ---------------------
 
         except Exception as e:
@@ -346,15 +366,11 @@ class GlobalCommands(commands.Cog):
             await interaction.followup.send(f"❌ Chyba při stahování: {result['error']}", ephemeral=True)
             return
 
-        # --- Embed Construction (New Style) ---
-        # "Name: ... \n Autor: ..." and optional "Original: ..."
-        # Color: Orange
-        
+        # --- Embed Construction ---
         title_text = result.get('title', '?')
         uploader_text = result.get('uploader', '?')
         
         description_text = f"Name: **{title_text}**\nAutor: **{uploader_text}**"
-        
         if original:
              description_text += f"\nOriginal: [Odkaz]({url})"
         
@@ -362,79 +378,110 @@ class GlobalCommands(commands.Cog):
         embed.set_author(name="Media downloader", icon_url=self.bot.user.display_avatar.url)
         
         # Footer stats
-        # "1280x720 | 29:29 | 455.8 MB"
         res = result.get('resolution', '?')
         dur = result.get('duration', 0)
         mins, secs = divmod(dur, 60)
         dur_str = f"{int(mins)}:{int(secs):02d}"
         size_mb = result.get('filesize_mb', 0)
-        
         footer_text = f"{res} | {dur_str} | {size_mb} MB"
         
-        embed.set_footer(text=footer_text)
+        # Only show footer stats if statistika != 'off' (OR explicit User request "statistiky ty muzeme schovat")
+        if statistika != "off":
+            embed.set_footer(text=footer_text)
+
         
-        
-        SAFE_LIMIT_MB = 10
+        SAFE_LIMIT_MB = 2000 # High limit, rely on discord exception
         filesize = result.get('filesize_mb', 0)
         filename = result['filename']
         
-        try:
+        # Helper to force web upload
+        async def do_web_host_flow():
+            key = await web_server.add_file(filename)
+            safe_filename = urllib.parse.quote(os.path.basename(filename))
+            base_url = "https://discordvids.420013.xyz"
+            page_url = f"{base_url}/videa-z-discordu/{key}"
+            direct_url = f"{base_url}/download/{key}/{safe_filename}"
+            
+            # Embed update for web flow
+            web_embed = embed.copy()
+            web_embed.description += f"\n\n[Zobrazit stránku ke stažení]({page_url})"
+            if statistika != "off":
+                 web_embed.set_footer(text=f"{footer_text} | ⚠️ >Limit")
+            else:
+                 web_embed.set_footer(text="⚠️ >Limit")
 
-            if filesize > SAFE_LIMIT_MB:
-                key = await web_server.add_file(filename)
+            if skryt:
+                await interaction.followup.send(embed=web_embed, ephemeral=True)
+                await interaction.followup.send(content=f"**Přímý odkaz:**\n{direct_url}", ephemeral=True)
+            else:
+                # Public web flow:
+                # Always show embed stats for sender? User request: "uvidi jen clovek co poslal"
+                # If stats='public' -> public embed.
+                # If stats='off'/'private' -> private embed.
                 
-                # Construct URLs
-                safe_filename = urllib.parse.quote(os.path.basename(filename))
-                base_url = "https://discordvids.420013.xyz"
-                page_url = f"{base_url}/videa-z-discordu/{key}"
-                direct_url = f"{base_url}/download/{key}/{safe_filename}"
+                embed_is_public = (statistika == "public")
                 
-
-                embed.description += f"\n\n[Zobrazit stránku ke stažení]({page_url})"
-                embed.set_footer(text=f"{footer_text} | ⚠️ >10MB")
-                
-                if skryt:
-                    # Everything ephemeral
-                    await interaction.followup.send(embed=embed, ephemeral=True)
-                    await interaction.followup.send(content=f"**Přímý odkaz:**\n{direct_url}", ephemeral=True)
+                # Send private embed if needed
+                if not embed_is_public:
+                    await interaction.followup.send(embed=web_embed, ephemeral=True)
                 else:
-                    # Public Interaction:
-                    # 1. Send Stats Embed check (First, so link is under it)
-                    # DEFAULT (statistika="off") -> Ephemeral Embed (as per Request "defualtně ... uvidí jen člověk co to poslal")
-                    # If statistika="public" -> Public Embed
-                    # If statistika="private" -> Ephemeral Embed
+                    await interaction.followup.send(embed=web_embed, ephemeral=False)
                     
-                    embed_ephemeral = True
-                    if statistika == "public":
-                        embed_ephemeral = False
-                    
-                    await interaction.followup.send(embed=embed, ephemeral=embed_ephemeral)
-                    
-                    # 2. Send Public Direct Link
-                    await interaction.followup.send(content=direct_url, ephemeral=False)
-                
+                # Public direct link always
+                await interaction.followup.send(content=direct_url, ephemeral=False)
+
+        try:
+            # Check excessively large files before trying
+            if filesize > SAFE_LIMIT_MB:
+                 await do_web_host_flow()
             else:
                 file = discord.File(filename)
                 
+                # --- Presentation Logic ---
                 if skryt:
-                    # Vše ephemeral
-                    await interaction.followup.send(file=file, ephemeral=True)
-                    if statistika != "off":
-                         await interaction.followup.send(embed=embed, ephemeral=True)
+                     # USER HIDDEN: Everything ephemeral
+                     # If stats/orig enabled -> Embed. If not -> Just File? 
+                     # Actually if skryt=True, user probably wants to see info. Let's show Embed if constructed.
+                     await interaction.followup.send(file=file, embed=embed, ephemeral=True)
                 else:
-                    # Video public
-                    await interaction.followup.send(file=file, ephemeral=False)
-                    
-                    if statistika == "public":
-                        await interaction.followup.send(embed=embed, ephemeral=False)
-                    elif statistika == "private":
-                        await interaction.followup.send(embed=embed, ephemeral=True)
-                        
+                     # PUBLIC
+                     # Logic Scenarios:
+                     # 1. Stats OFF & Original OFF -> No Embed, just File.
+                     if statistika == "off" and not original:
+                          await interaction.followup.send(file=file, ephemeral=False)
+                     
+                     # 2. Stats PUBLIC | Original TRUE -> Combined Message (File + Embed)
+                     elif statistika == "public" or original:
+                          await interaction.followup.send(file=file, embed=embed, ephemeral=False)
+                     
+                     # 3. Stats PRIVATE -> File Public, Embed Private
+                     elif statistika == "private":
+                          await interaction.followup.send(file=file, ephemeral=False)
+                          await interaction.followup.send(embed=embed, ephemeral=True)
+                     
+                     # Fallback (e.g. stats=off but original=True caught above)
+                     else:
+                          # Should be covered.
+                          await interaction.followup.send(file=file, ephemeral=False)
+
+        except discord.HTTPException as e:
+            # Catch 413 or "Request Entity Too Large"
+            if e.status == 413 or e.code == 40005:
+                print(f"⚠️ [Download] Soubor příliš velký pro Discord ({filesize}MB), fallback na web.")
+                await do_web_host_flow()
+            else:
+                await interaction.followup.send(f"❌ Chyba při odesílání na Discord: {e}", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ Chyba při odesílání: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ Obecná chyba: {e}", ephemeral=True)
         finally:
-            if filesize <= SAFE_LIMIT_MB:
-                media_downloader.delete_file(filename)
+            is_hosted = False
+            for k, v in web_server.file_storage.items():
+                if v['filename'] == os.path.basename(filename):
+                    is_hosted = True
+                    break
+            
+            if not is_hosted and filesize <= SAFE_LIMIT_MB:
+                 media_downloader.delete_file(filename)
 
 
 async def setup(bot: commands.Bot):
