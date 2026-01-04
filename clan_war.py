@@ -390,15 +390,25 @@ class ClanWarHandler:
         )
 
         # Základní statistiky
+        our_attacks_count = clan.get('attacks', 0)
+        our_stars_count = clan.get('stars', 0)
+        our_avg_stars = round(our_stars_count / our_attacks_count, 2) if our_attacks_count > 0 else 0
+
+        their_attacks_count = opponent.get('attacks', 0)
+        their_stars_count = opponent.get('stars', 0)
+        their_avg_stars = round(their_stars_count / their_attacks_count, 2) if their_attacks_count > 0 else 0
+
         our_stats = (
-            f"**{clan.get('stars', 0)}⭐**\n"
-            f"Útoky: {clan.get('attacks', 0)}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', attacks_per_member)}\n"
-            f"{round(clan.get('destructionPercentage', 0), 1)}%"
+            f"**{our_stars_count}⭐**\n"
+            f"Útoky: {our_attacks_count}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', attacks_per_member)}\n"
+            f"{round(clan.get('destructionPercentage', 0), 1)}%\n"
+            f"Ø {our_avg_stars}⭐/útok"
         )
         their_stats = (
-            f"**{opponent.get('stars', 0)}⭐**\n"
-            f"Útoky: {opponent.get('attacks', 0)}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', attacks_per_member)}\n"
-            f"{round(opponent.get('destructionPercentage', 0), 1)}%"
+            f"**{their_stars_count}⭐**\n"
+            f"Útoky: {their_attacks_count}/{war_data.get('teamSize', 0) * war_data.get('attacksPerMember', attacks_per_member)}\n"
+            f"{round(opponent.get('destructionPercentage', 0), 1)}%\n"
+            f"Ø {their_avg_stars}⭐/útok"
         )
 
         embed.add_field(name=f"**{self._escape_name(clan.get('name', 'Náš klan'))}**", value=our_stats, inline=True)
