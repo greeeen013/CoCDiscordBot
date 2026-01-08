@@ -492,25 +492,63 @@ async def setup_mod_commands(bot):
         group = await api_handler.fetch_league_group(our_tag, bot.config)
         
         if group and group.get('state') != 'notInWar':
-            # Zkusíme dohledat válku v aktuálním kole (podle uloženého indexu, default 0)
-            round_idx = room_storage.get("current_cwl_round")
-            if round_idx is None:
-                round_idx = 0
-            
+            # Změna: Projdeme všechna kola aktivně, nespoléháme na 'current_cwl_round'
             rounds = group.get("rounds", [])
-            if 0 <= round_idx < len(rounds):
-                war_tags = rounds[round_idx].get("warTags", [])
+            
+            # Projdeme všechna kola od posledního k prvnímu (nebo jen všechna),
+            # abychom našli to 'nejlepší' (Active > Preparation > Ended).
+            # Ale pozor: rounds[0] je 1. kolo, rounds[-1] je poslední.
+            
+            best_cwl_war = None
+            best_cwl_score = -1
+
+            # Funkce pro skóre stavu války
+            def get_state_score(state):
+                if state == "inWar": return 3
+                if state == "preparation": return 2
+                if state == "warEnded": return 1
+                return 0
+
+            # Proiterujeme všechna dostupná kola
+            for r in rounds:
+                war_tags = r.get("warTags", [])
                 for tag in war_tags:
-                    if tag == "#0":
+                    if tag == "#0": 
                         continue
-                        
+                    
+                    # Optimalizace: Nestahovat data, pokud už jedno inWar máme?
+                    # Raději budeme přesní. Ale API calls mohou být drahé. 
+                    # Nicméně /kdo_neodehral se nevolá často.
+                    
                     w = await api_handler.fetch_league_war(tag, bot.config)
-                    if w:
-                        c_tag = w.get('clan', {}).get('tag', '').upper()
-                        o_tag = w.get('opponent', {}).get('tag', '').upper()
-                        if our_tag == c_tag or our_tag == o_tag:
+                    if not w:
+                        continue
+                    
+                    c_tag = w.get('clan', {}).get('tag', '').upper()
+                    o_tag = w.get('opponent', {}).get('tag', '').upper()
+                    
+                    if our_tag == c_tag or our_tag == o_tag:
+                        s = w.get("state")
+                        sc = get_state_score(s)
+                        
+                        # Pokud najdeme inWar, bereme ho hned a končíme hledání
+                        if s == "inWar":
                             cwl_candidate = w
+                            best_cwl_score = 3
                             break
+                        
+                        # Jinak bereme pokud je lepší než co máme (např. preparation je lepší než ended)
+                        # Pokud jsou dvě shodné (např. dvě ended), bereme tu pozdější (v poli rounds)
+                        # Protože iterujeme od začátku do konce, pozdější přepíše dřívější, 
+                        # pokud dáme >=. Ale 'warEnded' předchozího kola vs 'preparation' dalšího?
+                        # Preparation (2) > Ended (1). Takže OK.
+                        if sc >= best_cwl_score:
+                            cwl_candidate = w
+                            best_cwl_score = sc
+                            
+                if best_cwl_score == 3:
+                     # Máme aktivní válku, není třeba hledat v dalších kolech
+                     break
 
         # b) Zkusíme najít klasickou CW
         cw_candidate = await fetch_current_war(bot.clan_tag, bot.config)
