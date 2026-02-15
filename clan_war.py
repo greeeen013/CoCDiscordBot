@@ -330,11 +330,29 @@ class ClanWarHandler:
                 for i in range(0, len(mentions), 5):
                     await war_end_channel.send(" ".join(mentions[i:i + 5]) + " .")
 
+            # === Specifická zpráva pro konec války (vyžádáno uživatelem) ===
+            try:
+                if war_end_channel:
+                    await war_end_channel.send("clan wars válka právě skončila")
+                    print("✅ [clan_war] Odeslána zpráva o konci války.")
+            except Exception as e:
+                print(f"❌ [clan_war] Chyba při odesílání zprávy o konci války: {e}")
+
         # Reset událostí při nové válce
         if self._last_state is not None and self._last_state != 'preparation' and state == 'preparation':
             print("🔁 [clan_war] Detekována nová válka – resetuji pořadí útoků.")
             self.last_processed_order = 0
             reset_war_reminder_flags(self)
+
+        # === Notifikace startu války (Battle Day) ===
+        if self._last_state == 'preparation' and state == 'inWar':
+            log_channel = self.bot.get_channel(self.war_ping_channel_id)
+            if log_channel:
+                try:
+                    await log_channel.send("začaly Clan Wars můžete útočit")
+                    print("✅ [clan_war] Odeslána notifikace o začátku Battle Day.")
+                except Exception as e:
+                    print(f"❌ [clan_war] Chyba při odesílání notifikace o začátku Battle Day: {e}")
 
         self._last_state = state
 
@@ -641,6 +659,35 @@ class ClanWarHandler:
 
         embed.set_footer(text=" | ".join(footer_parts))
         await channel.send(embed=embed)
+
+    async def check_schedule_reminder(self, war_active: bool):
+        """
+        Zkontroluje, zda je 19:00 a není aktivní válka.
+        Pokud ano, pošle připomínku do LOG kanálu.
+        """
+        # Kontrola, zda neběží CWL (pokud běží CWL, "zapnout clan wars" nedává smysl)
+        cwl_active = room_storage.get("cwl_active") or False
+        if cwl_active:
+            return
+
+        now = datetime.now()
+        # Kontrola času (např. 19:00 - 19:59)
+        # Scheduler běží každé 3 minuty, takže se trefíme.
+        if now.hour == 19:
+            # Pokud není aktivní válka (ani přípravný den, ani battle day)
+            if not war_active:
+                today_str = now.strftime("%Y-%m-%d")
+                last_sent = room_storage.get("last_no_war_reminder_date")
+
+                if last_sent != today_str:
+                    log_channel = self.bot.get_channel(self.war_ping_channel_id)
+                    if log_channel:
+                        try:
+                            await log_channel.send("čas zapnout clan wars")
+                            room_storage.set("last_no_war_reminder_date", today_str)
+                            print("✅ [clan_war] Odeslána připomínka 'čas zapnout clan wars'")
+                        except Exception as e:
+                            print(f"❌ [clan_war] Chyba při odesílání připomínky (19:00): {e}")
 
     def _find_member_by_tag(self, tag: str, war_data: dict) -> Optional[dict]:
         """Najde člena podle tagu"""

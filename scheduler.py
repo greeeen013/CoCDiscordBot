@@ -154,12 +154,18 @@ async def hourly_clan_update(config: dict, bot):
             try:
                 # --- Normální války ---
                 war_data = await api_handler.fetch_current_war(config["CLAN_TAG"], config)
+                war_active = False
+                
                 if war_data and war_data.get("state") in ("preparation", "inWar"):
+                    war_active = True
                     await clan_war_handler.process_war_data(war_data)
                 elif war_data and war_data.get("state") == "warEnded":
                     await clan_war_handler.process_war_data(war_data)
                 else:
                     pass  # žádná aktivní war
+
+                # Kontrola reminderu (19:00)
+                await clan_war_handler.check_schedule_reminder(war_active)
 
                 # --- CWL ---
                 await clan_war_league_handler.handle_cwl_status(clan_war_handler)
