@@ -649,6 +649,68 @@ class ClanWarHandler:
                         reason="clan wars útok který nebyl mirror"
                     )
 
+                    # Oznámení do log kanálu
+                    log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
+                    if log_channel:
+                        # Zjisti mirror útočníka (soupeř na stejné pozici jako útočník)
+                        mirror_enemy = (
+                            their_members_sorted[attacker_pos - 1]
+                            if attacker_pos - 1 < len(their_members_sorted)
+                            else None
+                        )
+                        mirror_name = mirror_enemy.get("name", "?") if mirror_enemy else "?"
+                        mirror_th = mirror_enemy.get("townhallLevel", 10) if mirror_enemy else 10
+                        mirror_th_emoji = TOWN_HALL_EMOJIS.get(mirror_th, "")
+
+                        # Náš hráč na pozici obránce (komu útočník "vyzral" cíl)
+                        our_defender_pos_member = (
+                            our_members_sorted[defender_pos - 1]
+                            if defender_pos - 1 < len(our_members_sorted)
+                            else None
+                        )
+                        our_at_defender_name = our_defender_pos_member.get("name", "?") if our_defender_pos_member else "?"
+                        our_at_defender_th = our_defender_pos_member.get("townhallLevel", 10) if our_defender_pos_member else 10
+                        our_at_defender_th_emoji = TOWN_HALL_EMOJIS.get(our_at_defender_th, "")
+                        our_at_defender_mention = (
+                            await self._get_discord_mention(our_defender_pos_member.get("tag"))
+                            if our_defender_pos_member else None
+                        )
+                        our_at_defender_display = our_at_defender_mention or f"**{our_at_defender_name}**"
+
+                        attacker_th_emoji = TOWN_HALL_EMOJIS.get(attacker.get("townhallLevel", 10), "")
+                        defender_th_emoji = TOWN_HALL_EMOJIS.get(defender.get("townhallLevel", 10), "")
+                        stars_str = "⭐" * attack.get("stars", 0) or "☆☆☆"
+                        destruction = attack.get("destructionPercentage", 0)
+
+                        attacker_display = discord_mention or f"**{attacker_name}**"
+
+                        log_embed = discord.Embed(
+                            title="⚠️ Non-mirror útok",
+                            color=discord.Color.orange()
+                        )
+                        log_embed.add_field(
+                            name="Útočník",
+                            value=f"**#{attacker_pos}** {attacker_th_emoji} {attacker_name}\n{attacker_display}",
+                            inline=True
+                        )
+                        log_embed.add_field(
+                            name="Zaútočil na",
+                            value=f"**#{defender_pos}** {defender_th_emoji} {defender_name}\n`{stars_str}  {destruction}%`",
+                            inline=True
+                        )
+                        log_embed.add_field(
+                            name="Mirror (měl zaútočit na)",
+                            value=f"**#{attacker_pos}** {mirror_th_emoji} {mirror_name}",
+                            inline=True
+                        )
+                        log_embed.add_field(
+                            name=f"Náš hráč na #{defender_pos} (vyžraný cíl)",
+                            value=f"**#{defender_pos}** {our_at_defender_th_emoji} {our_at_defender_name}\n{our_at_defender_display}",
+                            inline=False
+                        )
+                        log_embed.set_footer(text=f"Útok v pořadí #{attack.get('order', 0)} | Do konce war: {remaining_hours:.1f}h")
+                        await log_channel.send(embed=log_embed)
+
         # Footer
         footer_parts = [
             f"Útok #{attack.get('order', 0)}",
