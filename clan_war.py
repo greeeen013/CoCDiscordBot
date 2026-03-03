@@ -288,8 +288,8 @@ class ClanWarHandler:
         # --- Konec detekce ---
 
         # --- Kontrola, zda je náš tag v opponent a pokud ano prohodíme je ---
-        our_clan_tag = self.config["CLAN_TAG"].upper()
-        if war_data.get('opponent', {}).get('tag', '').upper() == our_clan_tag:
+        our_clan_tag = self.config.get("CLAN_TAG", "").strip().upper()
+        if war_data.get('opponent', {}).get('tag', '').strip().upper() == our_clan_tag:
             print("🔄 [clan_war] Prohazuji klany (náš tag nalezen v opponent)")
             # Prohození clan a opponent
             clan_data = war_data['opponent']

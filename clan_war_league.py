@@ -44,7 +44,11 @@ class ClanWarLeagueHandler:
                 if not war:
                     continue
 
-                if war["clan"]["tag"] == self.config["CLAN_TAG"] or war["opponent"]["tag"] == self.config["CLAN_TAG"]:
+                our_tag = self.config.get("CLAN_TAG", "").strip().upper()
+                clan_tag = war.get("clan", {}).get("tag", "").strip().upper()
+                opp_tag = war.get("opponent", {}).get("tag", "").strip().upper()
+                
+                if clan_tag == our_tag or opp_tag == our_tag:
                     state = war.get("state")
                     
                     if state == "warEnded" and catchup_mode:
