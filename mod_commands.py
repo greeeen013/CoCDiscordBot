@@ -25,6 +25,7 @@ from constants import (
     ROLE_VERIFIED, 
     ROLE_ELDER, 
     ROLE_CO_LEADER, 
+    ROLE_LEADER,
     TH_TO_PET_HOUSE, 
     PET_MAX_LEVELS, 
     EQUIPMENT_DATA, 
@@ -94,8 +95,11 @@ async def setup_mod_commands(bot):
         except Exception:
             return False
 
+    def _is_leader(member: discord.Member) -> bool:
+        return _has_role(member, ROLE_LEADER)
+
     def _is_co_leader(member: discord.Member) -> bool:
-        return _has_role(member, ROLE_CO_LEADER)
+        return _has_role(member, ROLE_CO_LEADER) or _is_leader(member)
 
     def _is_elder(member: discord.Member) -> bool:
         return _has_role(member, ROLE_ELDER)
@@ -1615,3 +1619,75 @@ async def setup_mod_commands(bot):
                 "❌ Došlo k chybě při zpracování příkazu. Administrátor byl informován.",
                 ephemeral=True
             )
+
+    # ========== /infolog ==========
+    @bot.tree.command(
+        name="infolog",
+        description="Zobrazí důležité debug informace o botovi (pouze pro leadra).",
+        guild=bot.guild_object
+    )
+    async def infolog(interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        if not _is_leader(interaction.user):
+            await interaction.followup.send("❌ Tento příkaz může použít pouze leader.", ephemeral=True)
+            return
+
+        import sys
+        import platform
+        import psutil
+        import time
+
+        try:
+            import coc
+            coc_version = coc.__version__
+        except Exception:
+            coc_version = "Neznámá"
+
+        # Převod sekund na srozumitelný čas
+        def humanize_seconds(sec: int) -> str:
+            d, rem = divmod(sec, 86400)
+            h, rem = divmod(rem, 3600)
+            m, s = divmod(rem, 60)
+            parts = []
+            if d: parts.append(f"{d}d")
+            if h: parts.append(f"{h}h")
+            if m: parts.append(f"{m}m")
+            if s or not parts: parts.append(f"{s}s")
+            return " ".join(parts)
+
+        process = psutil.Process(os.getpid())
+        bot_uptime = time.time() - process.create_time()
+        uptime_str = humanize_seconds(int(bot_uptime))
+
+        mem_info = process.memory_info()
+        memory_mb = mem_info.rss / (1024 * 1024)
+
+        os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
+        py_version = sys.version.split()[0]
+        discord_version = discord.__version__
+
+        latency = round(bot.latency * 1000, 2)
+        cogs = len(bot.cogs)
+
+        try:
+            active_tasks = len(asyncio.all_tasks())
+        except RuntimeError:
+            active_tasks = 0
+
+        embed = discord.Embed(title="📊 InfoLog - Debug Informace", color=discord.Color.blue())
+        embed.add_field(
+            name="🤖 Bot Info", 
+            value=f"**Uptime:** {uptime_str}\n**Ping:** {latency} ms\n**Cogs:** {cogs}\n**Async Tasks:** {active_tasks}", 
+            inline=False
+        )
+        embed.add_field(
+            name="💻 Systém & Prostředí", 
+            value=f"**OS:** {os_info}\n**RAM (Bot):** {memory_mb:.2f} MB\n**Python:** {py_version}\n**Discord.py:** {discord_version}\n**Coc.py:** {coc_version}", 
+            inline=False
+        )
+
+        if hasattr(bot, 'clan_tag'):
+            embed.add_field(name="⚔️ Coc Config", value=f"**Clan Tag:** {bot.clan_tag}", inline=False)
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
