@@ -1690,4 +1690,52 @@ async def setup_mod_commands(bot):
         if hasattr(bot, 'clan_tag'):
             embed.add_field(name="⚔️ Coc Config", value=f"**Clan Tag:** {bot.clan_tag}", inline=False)
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        files_to_send = []
+        if hasattr(bot, 'clan_tag') and hasattr(bot, 'config'):
+            import io
+            import json
+            
+            # 1. Fetch normal war
+            cw_data = await api_handler.fetch_current_war(bot.clan_tag, bot.config)
+            cw_str = json.dumps(cw_data, indent=2, ensure_ascii=False) if cw_data else '{"error": "Bez dat"}'
+            cw_file = discord.File(io.BytesIO(cw_str.encode("utf-8")), filename="current_war_api.json")
+            files_to_send.append(cw_file)
+                
+            # 2. Fetch CWL group
+            cwl_data = await api_handler.fetch_league_group(bot.clan_tag, bot.config)
+            cwl_str = json.dumps(cwl_data, indent=2, ensure_ascii=False) if cwl_data else '{"error": "Bez dat"}'
+            cwl_file = discord.File(io.BytesIO(cwl_str.encode("utf-8")), filename="cwl_group_api.json")
+            files_to_send.append(cwl_file)
+
+            # 3. Pokud existuje CWL, pokusíme se najít naši aktuální / probíhající CWL válku
+            if cwl_data and 'clans' in cwl_data and 'rounds' in cwl_data:
+                our_war_data = None
+                our_clan_tag = bot.clan_tag.replace("#", "")
+                
+                # Projdeme kola od konce (poslední nejdřív, pro nalezení aktivní války)
+                rounds = reversed(cwl_data.get('rounds', []))
+                for round_data in rounds:
+                    war_tags = [wt for wt in round_data.get('warTags', []) if wt != "#0"]
+                    if not war_tags:
+                        continue
+                        
+                    for war_tag in war_tags:
+                        war_data = await api_handler.fetch_league_war(war_tag, bot.config)
+                        if war_data and war_data.get("state") not in ["notInWar"]:
+                            c1 = war_data.get("clan", {}).get("tag", "").replace("#", "")
+                            c2 = war_data.get("opponent", {}).get("tag", "").replace("#", "")
+                            if c1 == our_clan_tag or c2 == our_clan_tag:
+                                our_war_data = war_data
+                                break
+                    if our_war_data:
+                        break
+                        
+                if our_war_data:
+                    ow_str = json.dumps(our_war_data, indent=2, ensure_ascii=False)
+                    ow_file = discord.File(io.BytesIO(ow_str.encode("utf-8")), filename="our_cwl_war_api.json")
+                    files_to_send.append(ow_file)
+                else:
+                    ow_file = discord.File(io.BytesIO(b'{"error": "Klan nenalezen v aktivnich warTags."}'), filename="our_cwl_war_api.json")
+                    files_to_send.append(ow_file)
+
+        await interaction.followup.send(embed=embed, files=files_to_send, ephemeral=True)
