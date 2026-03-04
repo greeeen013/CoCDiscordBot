@@ -14,19 +14,31 @@ class ClanWarLeagueHandler:
         """
         cwl_active = room_storage.get("cwl_active") or False
         current_round = room_storage.get("current_cwl_round") or 0
+        stored_season = room_storage.get("cwl_season")
 
         if cwl_active:
             # Přidán argument config
             group_data = await api_handler.fetch_league_group(self.config["CLAN_TAG"], self.config)
             if not group_data:
-                print("[CWL] Data skupiny nedostupná, končím iteraci.")
+                print("⚠️ [CWL] Data skupiny nedostupná, končím iteraci.")
                 # Pokud API selže, nevypínáme CWL hned, ale počkáme na příští pokus
                 return
+            
+            current_season = group_data.get("season")
+            if current_season and current_season != stored_season:
+                # Pokud sezónu zatím nemáme zapsanou a jsme v CWL, prostě ji uložíme (abysme neresetovali zbytečně běžící CWL při updatu bota).
+                # Pokud ji ale máme a NEODPOVIDÁ, znamená to, že se stará CWL nevypla a tohle je už úplně nová liga další měsíc!
+                if stored_season:
+                    print(f"🔄 [CWL] Nová sezóna CWL detekována ({current_season} vs. {stored_season}). Resetuji údaje.")
+                    room_storage.set("current_cwl_round", 0)
+                    room_storage.set("cwl_catchup_mode", True)
+                    current_round = 0
+                room_storage.set("cwl_season", current_season)
 
             rounds = group_data.get("rounds", [])
             if current_round >= len(rounds):
                 # Bezpečnostní reset pokud jsme mimo rozsah
-                print("[CWL] current_cwl_round >= počet kol, resetuji.")
+                print("🔄 [CWL] current_cwl_round >= počet kol, resetuji.")
                 room_storage.set("cwl_active", False)
                 room_storage.set("current_cwl_round", 0)
                 room_storage.set("cwl_catchup_mode", False)
@@ -39,6 +51,15 @@ class ClanWarLeagueHandler:
             
             if not war_tags or all(t == "#0" for t in war_tags):
                 # Jsme moc daleko nebo kolo ještě nemá los
+                # Pojistka pro případ, že se kolo nějak proklouzlo:
+                if current_round > 0:
+                    prev_tags = rounds[0].get("warTags", [])
+                    if prev_tags and prev_tags[0] != "#0":
+                        # Znamená to, že CWL zjevně reálně už běží aspoň od kola 0
+                        # Můžeme to vynutit resetováním
+                        print(f"🔄 [CWL] Objevena nekonzistence kol (aktuální {current_round} je prázdné, ale kolo 0 platí). Vracím na první kolo.")
+                        room_storage.set("current_cwl_round", 0)
+                        room_storage.set("cwl_catchup_mode", True)
                 return
             
             active_found, ended_found = False, False
@@ -108,8 +129,10 @@ class ClanWarLeagueHandler:
             # Zkontroluj, zda začíná nová CWL sezóna
             group_data = await api_handler.fetch_league_group(self.config["CLAN_TAG"], self.config)
             if group_data and group_data.get("state") in ("preparation", "inWar"):
-                print("[CWL] Detekován nový CWL, aktivuji.")
+                current_season = group_data.get("season")
+                print(f"▶️ [CWL] Detekován nový CWL (sezóna: {current_season}), aktivuji.")
                 room_storage.set("cwl_active", True)
                 room_storage.set("current_cwl_round", 0)
+                room_storage.set("cwl_season", current_season)
                 # Aktivujeme catchup mód pro případ, že začínáme uprostřed sezóny
                 room_storage.set("cwl_catchup_mode", True)
