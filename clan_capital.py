@@ -293,6 +293,17 @@ class ClanCapitalHandler:
         # Získáme aktuální stav (např. 'ongoing' nebo 'ended')
         state = capital_data.get('state', 'unknown')
 
+        # --- Detekce nového raidu podle startTime ---
+        current_start_time = capital_data.get('startTime')
+        stored_start_time = load_room_id("capital_start_time")
+
+        if current_start_time and current_start_time != stored_start_time:
+            print(f"🆕 [clan_capital] Detekován nový Clan Capital raid! Čas: {current_start_time}. Resetuji ID zprávy.")
+            self.current_capital_message_id = None
+            save_room_id("capital_status_message", None)
+            save_room_id("capital_start_time", current_start_time)
+            self._has_announced_end = False
+
         # Pokud se stav změnil od minula, informujeme v konzoli
         if self._last_state is None:
             print("ℹ️ [clan_capital] První zpracování dat.")

@@ -70,14 +70,17 @@ class RoomIdStorage:
         except Exception as e:
             print(f"[clan_war] [discord_rooms_ids] Chyba při zápisu: {e}")
 
-    def get(self, key: str):
-        return self.data.get(key)
+    def get(self, key: str, default=None):
+        self.load()
+        return self.data.get(key, default)
 
     def set(self, key: str, value):
+        self.load()
         self.data[key] = value
         self.save()
 
     def remove(self, key: str):
+        self.load()
         if key in self.data:
             del self.data[key]
             self.save()
