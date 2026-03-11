@@ -727,15 +727,22 @@ class ClanWarHandler:
 
     async def check_schedule_reminder(self, war_active: bool):
         """
-        Zkontroluje, zda je 19:00 a není aktivní válka.
-        Pokud ano, pošle připomínku do LOG kanálu.
+        Zkontroluje, zda je 19:00 (v lokálním čase - Europe/Prague) a není aktivní válka.
+        Pokud ano, pošle připomínku s pingem do LOG kanálu.
         """
+        try:
+            from zoneinfo import ZoneInfo
+            # Nastavíme přímo zónu Prahy, aby nedocházelo k problémům s časem na různých serverech
+            now = datetime.now(ZoneInfo("Europe/Prague"))
+        except ImportError:
+            # Pokud není dostupná zoneinfo, použijeme lokální čas
+            now = datetime.now()
+
         # Kontrola, zda neběží CWL (pokud běží CWL, "zapnout clan wars" nedává smysl)
         cwl_active = room_storage.get("cwl_active") or False
         if cwl_active:
             return
 
-        now = datetime.now()
         # Kontrola času (např. 19:00 - 19:59)
         # Scheduler běží každé 3 minuty, takže se trefíme.
         if now.hour == 19:
@@ -746,13 +753,20 @@ class ClanWarHandler:
 
                 if last_sent != today_str:
                     log_channel = self.bot.get_channel(self.war_ping_channel_id)
+                    if not log_channel:
+                        try:
+                            log_channel = await self.bot.fetch_channel(self.war_ping_channel_id)
+                        except discord.NotFound:
+                            print("❌ [clan_war] Reminder kanál nebyl nalezen přes fetch_channel.")
+                            return
+
                     if log_channel:
                         try:
                             await log_channel.send("čas zapnout clan wars")
                             room_storage.set("last_no_war_reminder_date", today_str)
-                            print("✅ [clan_war] Odeslána připomínka 'čas zapnout clan wars'")
+                            print(f"✅ [clan_war] Odeslána připomínka v {now.hour}:00: '{ping_msg}'")
                         except Exception as e:
-                            print(f"❌ [clan_war] Chyba při odesílání připomínky (19:00): {e}")
+                            print(f"❌ [clan_war] Chyba při odesílání připomínky na zapnutí war: {e}")
 
     def _find_member_by_tag(self, tag: str, war_data: dict) -> Optional[dict]:
         """Najde člena podle tagu"""
