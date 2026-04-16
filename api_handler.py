@@ -182,22 +182,36 @@ async def make_request(endpoint: str, config: dict) -> dict | None:
         return None
 
 
-async def fetch_league_group(clan_tag: str, config: dict) -> dict | None:
+async def fetch_league_group(clan_tag: str, config: dict) -> dict | None | bool:
     """
-    Získá data ligové skupiny pro aktuální CWL
-
-    :param clan_tag: Tag klanu (včetně #)
-    :return: Data ligové skupiny nebo None pokud není aktivní CWL
+    Získá data ligové skupiny pro aktuální CWL.
+    Vrací:
+      dict  – CWL aktivní, data k dispozici
+      False – 404, CWL jednoznačně skončila
+      None  – dočasná chyba (síť, timeout), stav neznámý
     """
     formatted_tag = f"%23{clan_tag.replace('#', '').upper()}"
-    endpoint = f"clans/{formatted_tag}/currentwar/leaguegroup"
+    url = f"{BASE_URL}/clans/{formatted_tag}/currentwar/leaguegroup"
+    headers = get_headers(config)
 
-    data = await make_request(endpoint, config)
-    if data and data.get('state') in ['warEnded', 'inWar', 'preparation']:
-        print(f"✅ [api_handler] Úspěšně získána CWL skupina pro klan {clan_tag}")
-        return data
-    else:
-        print(f"❌ [api_handler] Nenalezena aktivní CWL skupina pro klan {clan_tag}")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get('state') in ['warEnded', 'inWar', 'preparation']:
+                        print(f"✅ [api_handler] Úspěšně získána CWL skupina pro klan {clan_tag}")
+                        return data
+                    print(f"❌ [api_handler] Nenalezena aktivní CWL skupina pro klan {clan_tag}")
+                    return False
+                elif response.status == 404:
+                    print(f"❌ [api_handler] CWL skupina nenalezena (404) pro klan {clan_tag} — CWL skončila.")
+                    return False
+                else:
+                    print(f"❌ [api_handler] Chyba {response.status} při načítání CWL skupiny pro {clan_tag}")
+                    return None
+    except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+        print(f"❌ [api_handler] Síťová chyba při načítání CWL skupiny: {e}")
         return None
 
 

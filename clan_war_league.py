@@ -17,11 +17,17 @@ class ClanWarLeagueHandler:
         stored_season = room_storage.get("cwl_season")
 
         if cwl_active:
-            # Přidán argument config
             group_data = await api_handler.fetch_league_group(self.config["CLAN_TAG"], self.config)
-            if not group_data:
-                print("⚠️ [CWL] Data skupiny nedostupná, končím iteraci.")
-                # Pokud API selže, nevypínáme CWL hned, ale počkáme na příští pokus
+            if group_data is False:
+                # 404 nebo neaktivní stav — CWL jednoznačně skončila
+                print("🏁 [CWL] CWL skončila (404/neaktivní stav). Resetuji cwl_active.")
+                room_storage.set("cwl_active", False)
+                room_storage.set("current_cwl_round", 0)
+                room_storage.set("cwl_season", None)
+                return
+            if group_data is None:
+                # Dočasná síťová chyba — počkáme na příští pokus
+                print("⚠️ [CWL] Data skupiny nedostupná (síťová chyba), čekám na příští pokus.")
                 return
             
             current_season = group_data.get("season")
