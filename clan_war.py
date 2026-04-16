@@ -738,9 +738,12 @@ class ClanWarHandler:
             # Pokud není dostupná zoneinfo, použijeme lokální čas
             now = datetime.now()
 
+        print(f"🔍 [reminder] čas={now.strftime('%H:%M')}, war_active={war_active}, cwl_active={room_storage.get('cwl_active')}, last_sent={room_storage.get('last_no_war_reminder_date')}")
+
         # Kontrola, zda neběží CWL (pokud běží CWL, "zapnout clan wars" nedává smysl)
         cwl_active = room_storage.get("cwl_active") or False
         if cwl_active:
+            print("⏭️ [reminder] Přeskočeno — CWL je aktivní.")
             return
 
         # Kontrola času (např. 19:00 - 19:59)
@@ -751,22 +754,29 @@ class ClanWarHandler:
                 today_str = now.strftime("%Y-%m-%d")
                 last_sent = room_storage.get("last_no_war_reminder_date")
 
-                if last_sent != today_str:
-                    log_channel = self.bot.get_channel(self.war_ping_channel_id)
-                    if not log_channel:
-                        try:
-                            log_channel = await self.bot.fetch_channel(self.war_ping_channel_id)
-                        except discord.NotFound:
-                            print("❌ [clan_war] Reminder kanál nebyl nalezen přes fetch_channel.")
-                            return
+                if last_sent == today_str:
+                    print(f"⏭️ [reminder] Přeskočeno — dnes již odesláno ({today_str}).")
+                    return
 
-                    if log_channel:
-                        try:
-                            await log_channel.send("čas zapnout clan wars")
-                            room_storage.set("last_no_war_reminder_date", today_str)
-                            print(f"✅ [clan_war] Odeslána připomínka v {now.hour}:00: '{ping_msg}'")
-                        except Exception as e:
-                            print(f"❌ [clan_war] Chyba při odesílání připomínky na zapnutí war: {e}")
+                log_channel = self.bot.get_channel(self.war_ping_channel_id)
+                if not log_channel:
+                    try:
+                        log_channel = await self.bot.fetch_channel(self.war_ping_channel_id)
+                    except discord.NotFound:
+                        print(f"❌ [clan_war] Reminder kanál {self.war_ping_channel_id} nebyl nalezen.")
+                        return
+
+                if log_channel:
+                    try:
+                        await log_channel.send("čas zapnout clan wars")
+                        room_storage.set("last_no_war_reminder_date", today_str)
+                        print(f"✅ [clan_war] Odeslána připomínka v {now.hour}:00")
+                    except Exception as e:
+                        print(f"❌ [clan_war] Chyba při odesílání připomínky: {e}")
+            else:
+                print("⏭️ [reminder] Přeskočeno — válka je aktivní.")
+        else:
+            pass  # Není 19:xx, nic neposíláme
 
     def _find_member_by_tag(self, tag: str, war_data: dict) -> Optional[dict]:
         """Najde člena podle tagu"""
